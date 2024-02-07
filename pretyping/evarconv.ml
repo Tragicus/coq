@@ -268,42 +268,20 @@ let occur_rigidly flags env evd (evk,_) t =
    projection would have been reduced) *)
 
 let check_conv_record env sigma (t1,sk1) (t2,sk2) =
-  let open ValuePattern in
-  let (proji, u), arg = Termops.global_app_of_constr sigma t1 in
-  let t2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
-  let sk2 = Stack.append_app sk2' sk2 in
+  let (proji, _), arg = Termops.global_app_of_constr sigma t1 in
+  let h2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
+  let t2 = Stack.zip sigma (h2, Stack.append_app sk2' sk2) in
   let (sigma, solution), sk2_effective =
-    let t2 =
-      let rec remove_lambda t2 =
-        match EConstr.kind sigma t2 with
-        | Lambda (_,_,t2) -> remove_lambda t2
-        | Cast (t2,_,_) -> remove_lambda t2
-        | App (t2,_) -> t2
-        | _ -> t2 in
-      if Stack.is_empty sk2 then remove_lambda t2 else t2 in
-    try
-      match EConstr.kind sigma t2 with
-        Prod (_,_,_) -> (* assert (l2=[]); *)
-            CanonicalSolution.find env sigma (proji, Prod_cs),
-            (Stack.append_app [|t2|] Stack.empty)
-      | Sort s ->
-        let s = ESorts.kind sigma s in
-        CanonicalSolution.find env sigma
-          (proji, Sort_cs (Sorts.family s)),[]
-      | Proj (p, _, c) ->
-        CanonicalSolution.find env sigma(proji, Proj_cs (Names.Projection.repr p)), Stack.append_app [|c|] sk2
-      | _ ->
-        let (c2, _) = try destRef sigma t2 with DestKO -> raise Not_found in
-          CanonicalSolution.find env sigma (proji, Const_cs c2),sk2
-    with Not_found ->
-      CanonicalSolution.find env sigma (proji,Default_cs), []
+    try let (pat, _, args) = ValuePattern.of_constr sigma t2 in
+      CanonicalSolution.find env sigma (proji, pat), Stack.append_app_list args Stack.empty
+    with | Not_found | DestKO ->
+       CanonicalSolution.find env sigma (proji, Default_cs), []
   in
-  let open CanonicalSolution in
   let params1, c1, extra_args1 =
     match arg with
     | Some c -> (* A primitive projection applied to c *)
       let ty = Retyping.get_type_of ~lax:true env sigma c in
-      let (i,u), ind_args =
+      let _, ind_args =
         (* Are we sure that ty is not an evar? *)
         Inductiveops.find_mrectype env sigma ty
       in ind_args, c, sk1
@@ -313,13 +291,11 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
       | _ -> raise Not_found in
   let us2,extra_args2 =
     let l_us = List.length solution.cvalue_arguments in
-      if Int.equal l_us 0 then [], sk2_effective
-      else match (Stack.strip_n_app (l_us-1) sk2_effective) with
-      | None -> raise Not_found
-      | Some (l',el,s') -> ((Option.get @@ Stack.list_of_app_stack l') @ [el],s') in
+    if Int.equal l_us 0 then [], sk2_effective
+    else match (Stack.strip_n_app (l_us-1) sk2_effective) with
+    | None -> raise Not_found
+    | Some (l',el,s') -> ((Option.get @@ Stack.list_of_app_stack l') @ [el],s') in
   let h, _ = decompose_app sigma solution.body in
-  let t2 = Stack.zip sigma (t2,sk2) in
-  let h2, _ = decompose_app sigma t2 in
     sigma,(h, h2),solution.constant,solution.abstractions_ty,(solution.params,params1),
     (solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
     (solution.cvalue_abstraction, t2)
@@ -1260,7 +1236,7 @@ and conv_record flags env (evd,(h,h2),c,bs,(params,params1),(us,us2),(sk1,sk2),c
     let (evd',ks,_,test) =
       List.fold_left
         (fun (i,ks,m,test) b ->
-          if match n with Some n -> Int.equal m n | None -> false then
+          if Option.cata (Int.equal m) false n then
             let ty = Retyping.get_type_of env i t2 in
             let test i = evar_conv_x flags env i CUMUL ty (substl ks b) in
               (i,t2::ks, m-1, test)
