@@ -268,37 +268,53 @@ let occur_rigidly flags env evd (evk,_) t =
    projection would have been reduced) *)
 
 let check_conv_record env sigma (t1,sk1) (t2,sk2) =
-  let (proji, _), arg = Termops.global_app_of_constr sigma t1 in
-  let h2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
-  let t2 = Stack.zip sigma (h2, Stack.append_app sk2' sk2) in
-  let (sigma, solution), sk2_effective =
-    try let (pat, _, args) = ValuePattern.of_constr sigma t2 in
-      CanonicalSolution.find env sigma (proji, pat), Stack.append_app_list args Stack.empty
-    with | Not_found | DestKO ->
-       CanonicalSolution.find env sigma (proji, Default_cs), []
-  in
+   (* I only recognize ConstRef projections since these are the only ones for which
+      I know how to obtain the number of parameters. *)
+  let (proji, _), arg =
+    match Termops.global_app_of_constr sigma t1 with
+    | (Names.GlobRef.ConstRef proji, u), arg -> (proji, u), arg
+    | _ -> raise Not_found in
+  (* Given a ConstRef projection, I obtain the structure it is a projection from. *)
+  let structure = Structures.Structure.find_from_projection proji in
+  (* Knowing the structure and hence its number of arguments, I can cut sk1 into pieces. *)
   let params1, c1, extra_args1 =
     match arg with
     | Some c -> (* A primitive projection applied to c *)
       let ty = Retyping.get_type_of ~lax:true env sigma c in
-      let _, ind_args =
+      let (i, u), ind_args =
         (* Are we sure that ty is not an evar? *)
         Inductiveops.find_mrectype env sigma ty
       in ind_args, c, sk1
     | None ->
-      match Stack.strip_n_app solution.nparams sk1 with
-      | Some (params1, c1, extra_args1) -> (Option.get @@ Stack.list_of_app_stack params1), c1, extra_args1
+      match Reductionops.Stack.strip_n_app structure.nparams sk1 with
+      | Some (params1, c1, extra_args1) -> (Option.get @@ Reductionops.Stack.list_of_app_stack params1), c1, extra_args1
       | _ -> raise Not_found in
-  let us2,extra_args2 =
-    let l_us = List.length solution.cvalue_arguments in
-    if Int.equal l_us 0 then [], sk2_effective
-    else match (Stack.strip_n_app (l_us-1) sk2_effective) with
+  let h2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
+  let k = Reductionops.Stack.args_size sk2 - Reductionops.Stack.args_size extra_args1 in
+  let sk2 = Stack.append_app sk2' sk2 in
+  (* Knowing the shape of extra_args1, I can cut sk2 into pieces, extracting extra_args2 from it. *)
+  let args2, extra_args2 =
+    if k = 0 then [], sk2
+    else if k < 0 then raise Not_found
+    else match Reductionops.Stack.strip_n_app (k-1) sk2 with
     | None -> raise Not_found
-    | Some (l',el,s') -> ((Option.get @@ Stack.list_of_app_stack l') @ [el],s') in
+    | Some (l',el,s') -> ((Option.get @@ Reductionops.Stack.list_of_app_stack l') @ [el], s') in
+  let (sigma, solution), sk2_effective =
+     (* N.B. In the `Proj` case, the subject needs to be added in args2. *)
+    try let (pat, _, args2') = ValuePattern.of_constr sigma h2 in
+      let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, pat) in
+      if List.length solution.cvalue_arguments = k + (List.length args2') then (sigma, solution), args2' @ args2 else raise Not_found
+    with | Not_found | DestKO ->
+      let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, Default_cs) in
+      (* We have to drop the arguments args2 because the default solution does not have them. *)
+      if List.length solution.cvalue_arguments = 0 then (sigma, solution), [] else raise Not_found
+  in
+  let t2 = Stack.zip sigma (h2, (Stack.append_app_list args2 Stack.empty)) in
   let h, _ = decompose_app sigma solution.body in
     sigma,(h, h2),solution.constant,solution.abstractions_ty,(solution.params,params1),
-    (solution.cvalue_arguments,us2),(extra_args1,extra_args2),c1,
+    (solution.cvalue_arguments, sk2_effective),(extra_args1,extra_args2),c1,
     (solution.cvalue_abstraction, t2)
+
 
 (* Precondition: one of the terms of the pb is an uninstantiated evar,
  * possibly applied to arguments. *)
@@ -1236,7 +1252,7 @@ and conv_record flags env (evd,(h,h2),c,bs,(params,params1),(us,us2),(sk1,sk2),c
     let (evd',ks,_,test) =
       List.fold_left
         (fun (i,ks,m,test) b ->
-          if Option.cata (Int.equal m) false n then
+          if match n with Some n -> Int.equal m n | None -> false then
             let ty = Retyping.get_type_of env i t2 in
             let test i = evar_conv_x flags env i CUMUL ty (substl ks b) in
               (i,t2::ks, m-1, test)
