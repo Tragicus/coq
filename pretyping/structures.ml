@@ -206,7 +206,7 @@ let warn_projection_no_head_constant =
           ++ con_pp ++ str " of " ++ proji_sp_pp ++ strbrk ", ignoring it.")
 
 (* Intended to always succeed *)
-let compute_canonical_projections env ~warn (gref,ind) =
+let compute_canonical_projections env sigma ~warn (gref,ind) =
   let o_CTX = Environ.universes_of_global env gref in
   let o_DEF, c =
     match gref with
@@ -226,11 +226,11 @@ let compute_canonical_projections env ~warn (gref,ind) =
   let o_NPARAMS = List.length o_TPARAMS in
   let lpj = keep_true_projections lpj in
   List.fold_left2 (fun acc (spopt, canonical) t ->
-      let t = EConstr.Unsafe.to_constr (shrink_eta (Evd.from_env env) (EConstr.of_constr t)) in
+      let t = EConstr.Unsafe.to_constr (shrink_eta sigma (EConstr.of_constr t)) in
       if canonical
       then
         Option.cata (fun proji_sp ->
-            match ValuePattern.of_constr Evd.empty (EConstr.of_constr t) with
+            match ValuePattern.of_constr sigma (EConstr.of_constr t) with
             | patt, o_INJ, o_TCOMPS ->
               ((GlobRef.ConstRef proji_sp, (patt, t)),
                { o_ORIGIN = gref ; o_DEF ; o_CTX ; o_INJ ; o_TABS ; o_TPARAMS ; o_NPARAMS ; o_TCOMPS = List.map EConstr.Unsafe.to_constr o_TCOMPS })
@@ -308,7 +308,7 @@ let make env sigma ref =
   (ref,indsp)
 
 let register ~warn env sigma o =
-    compute_canonical_projections env ~warn o |>
+    compute_canonical_projections env sigma ~warn o |>
     List.iter (fun ((proj, (cs_pat, t)), s) ->
       let l = try GlobRef.Map.find proj !object_table with Not_found -> PatMap.empty in
       match PatMap.find cs_pat l with

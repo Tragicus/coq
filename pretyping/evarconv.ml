@@ -280,8 +280,10 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
   let params1, c1, extra_args1 =
     match arg with
     | Some c -> (* A primitive projection applied to c *)
-      let ty = Retyping.get_type_of ~lax:true env sigma c in
-      let (i, u), ind_args =
+      let ty =
+        try Retyping.get_type_of ~lax:true env sigma c with
+        | Retyping.RetypeError _ -> raise Not_found
+      in let (i, u), ind_args =
         (* Are we sure that ty is not an evar? *)
         Inductiveops.find_mrectype env sigma ty
       in ind_args, c, sk1
@@ -290,8 +292,8 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
       | Some (params1, c1, extra_args1) -> (Option.get @@ Reductionops.Stack.list_of_app_stack params1), c1, extra_args1
       | _ -> raise Not_found in
   let h2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
-  let k = Reductionops.Stack.args_size sk2 - Reductionops.Stack.args_size extra_args1 in
   let sk2 = Stack.append_app sk2' sk2 in
+  let k = Reductionops.Stack.args_size sk2 - Reductionops.Stack.args_size extra_args1 in
   (* Knowing the shape of extra_args1, I can cut sk2 into pieces, extracting extra_args2 from it. *)
   let args2, extra_args2 =
     if k = 0 then [], sk2
@@ -299,12 +301,14 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
     else match Reductionops.Stack.strip_n_app (k-1) sk2 with
     | None -> raise Not_found
     | Some (l',el,s') -> ((Option.get @@ Reductionops.Stack.list_of_app_stack l') @ [el], s') in
+  let (pat, _, args2') = try ValuePattern.of_constr sigma h2 with | DestKO -> (Default_cs, None, []) in
   let (sigma, solution), sk2_effective =
      (* N.B. In the `Proj` case, the subject needs to be added in args2. *)
-    try let (pat, _, args2') = ValuePattern.of_constr sigma h2 in
+    try
+      let () = if pat = Default_cs then raise Not_found else () in
       let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, pat) in
       if List.length solution.cvalue_arguments = k + (List.length args2') then (sigma, solution), args2' @ args2 else raise Not_found
-    with | Not_found | DestKO ->
+    with | Not_found ->
       let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, Default_cs) in
       (* We have to drop the arguments args2 because the default solution does not have them. *)
       if List.length solution.cvalue_arguments = 0 then (sigma, solution), [] else raise Not_found
