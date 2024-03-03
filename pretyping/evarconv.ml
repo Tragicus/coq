@@ -247,6 +247,29 @@ let occur_rigidly flags env evd (evk,_) t =
     | Normal b -> b
     | Reducible -> false
 
+type hook = Environ.env -> Evd.evar_map -> ((Names.Constant.t * EConstr.EInstance.t) * EConstr.t list * EConstr.t) -> (EConstr.t * EConstr.t list) -> (Evd.evar_map * Structures.CanonicalSolution.t) option
+
+let all_hooks = ref (CString.Map.empty : hook CString.Map.t)
+
+let register_hook ~name ?(override=false) h =
+  if not override && CString.Map.mem name !all_hooks then
+    CErrors.anomaly ~label:"CanonicalSolution.register_hook"
+      Pp.(str "Hook already registered: \"" ++ str name ++ str "\".");
+  all_hooks := CString.Map.add name h !all_hooks
+
+let active_hooks = Summary.ref ~name:"canonical_solution_hooks_hacked" ([] : string list)
+
+let deactivate_hook ~name =
+  active_hooks := List.filter (fun s -> not (String.equal s name)) !active_hooks
+
+let activate_hook ~name =
+  assert (CString.Map.mem name !all_hooks);
+  deactivate_hook ~name;
+  active_hooks := name :: !active_hooks
+
+let apply_hooks env sigma proj pat =
+  List.find_map (fun name -> CString.Map.get name !all_hooks env sigma proj pat) !active_hooks
+
 (* [check_conv_record env sigma (t1,stack1) (t2,stack2)] tries to decompose
    the problem (t1 stack1) = (t2 stack2) into a problem
 
@@ -270,12 +293,18 @@ let occur_rigidly flags env evd (evk,_) t =
 let check_conv_record env sigma (t1,sk1) (t2,sk2) =
    (* I only recognize ConstRef projections since these are the only ones for which
       I know how to obtain the number of parameters. *)
-  let (proji, _), arg =
+  let () = debug_unification (fun () -> Pp.(v 0 (str "enter check_conv_record with " ++ cut () ++
+    str "t1: " ++ Termops.Internal.print_constr_env env sigma (Stack.zip sigma (t1, sk1)) ++ cut () ++
+    str "t2: " ++ Termops.Internal.print_constr_env env sigma (Stack.zip sigma (t2, sk2))
+    ))) in
+  let (proji, u), arg =
     match Termops.global_app_of_constr sigma t1 with
     | (Names.GlobRef.ConstRef proji, u), arg -> (proji, u), arg
     | _ -> raise Not_found in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "got proj"))) in
   (* Given a ConstRef projection, I obtain the structure it is a projection from. *)
   let structure = Structures.Structure.find_from_projection proji in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "got structure"))) in
   (* Knowing the structure and hence its number of arguments, I can cut sk1 into pieces. *)
   let params1, c1, extra_args1 =
     match arg with
@@ -291,6 +320,7 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
       match Reductionops.Stack.strip_n_app structure.nparams sk1 with
       | Some (params1, c1, extra_args1) -> (Option.get @@ Reductionops.Stack.list_of_app_stack params1), c1, extra_args1
       | _ -> raise Not_found in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "decomposed t1"))) in
   let h2, sk2' = decompose_app sigma (shrink_eta sigma t2) in
   let sk2 = Stack.append_app sk2' sk2 in
   let k = Reductionops.Stack.args_size sk2 - Reductionops.Stack.args_size extra_args1 in
@@ -301,19 +331,30 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
     else match Reductionops.Stack.strip_n_app (k-1) sk2 with
     | None -> raise Not_found
     | Some (l',el,s') -> ((Option.get @@ Reductionops.Stack.list_of_app_stack l') @ [el], s') in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "decomposed t1"))) in
   let (pat, _, args2') = try ValuePattern.of_constr sigma h2 with | DestKO -> (Default_cs, None, []) in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "got pattern"))) in
   let (sigma, solution), sk2_effective =
      (* N.B. In the `Proj` case, the subject needs to be added in args2. *)
-    try
+    try begin try
       let () = if pat = Default_cs then raise Not_found else () in
+      let () = debug_unification (fun () -> Pp.(v 0 (str "try with pattern"))) in
       let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, pat) in
       if List.length solution.cvalue_arguments = k + (List.length args2') then (sigma, solution), args2' @ args2 else raise Not_found
     with | Not_found ->
+      let () = debug_unification (fun () -> Pp.(v 0 (str "try default"))) in
       let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, Default_cs) in
       (* We have to drop the arguments args2 because the default solution does not have them. *)
-      if List.length solution.cvalue_arguments = 0 then (sigma, solution), [] else raise Not_found
+      if List.length solution.cvalue_arguments = 0 then (sigma, solution), [] else raise Not_found end
+     with | Not_found ->
+       let () = debug_unification (fun () -> Pp.(v 0 (str "try hook"))) in
+       match (apply_hooks env sigma ((proji, u), params1, c1) (t2, args2)) with
+       | Some r -> r, args2' @ args2
+       | None -> raise Not_found
+
   in
   let t2 = Stack.zip sigma (h2, (Stack.append_app_list args2 Stack.empty)) in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "exit check_conv_record with " ++ Termops.Internal.print_constr_env env sigma solution.constant))) in
   let h, _ = decompose_app sigma solution.body in
     sigma,(h, h2),solution.constant,solution.abstractions_ty,(solution.params,params1),
     (solution.cvalue_arguments, sk2_effective),(extra_args1,extra_args2),c1,

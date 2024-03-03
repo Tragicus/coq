@@ -148,6 +148,7 @@ states: dunestrap
 	dune build $(DUNEOPT) dev/shim/coqtop
 
 NONDOC_INSTALL_TARGETS:=coq-core.install coq-stdlib.install coqide-server.install coqide.install coq.install
+LIB_TARGETS:=coq-core.install coq-stdlib.install coqide-server.install
 
 world: dunestrap
 	dune build $(DUNEOPT) $(NONDOC_INSTALL_TARGETS)
@@ -158,6 +159,9 @@ vio: dunestrap
 
 watch:
 	dune build $(DUNEOPT) $(NONDOC_INSTALL_TARGETS) -w
+
+lib: dunestrap
+	dune build $(DUNEOPT) $(LIB_TARGETS)
 
 check:
 	dune build $(DUNEOPT) @check
@@ -186,6 +190,9 @@ install:
 	@echo "To install Coq using dune, use 'dune build -p P && dune install P'"
 	@echo "where P is any of the packages defined by opam files in the root dir"
 	@false
+
+install-lib:
+	dune install coq-core coq-stdlib coqide-server
 
 fmt:
 	dune build @fmt --auto-promote
