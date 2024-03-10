@@ -46,6 +46,7 @@ let auto_core_unif_flags_of st1 st2 = {
   restrict_conv_on_strict_subterms = false; (* Compat *)
   modulo_betaiota = false;
   modulo_eta = true;
+  with_cs = true;
 }
 
 let auto_unif_flags_of st1 st2 =

@@ -563,6 +563,7 @@ let rewrite_core_unif_flags = {
   Unification.restrict_conv_on_strict_subterms = false;
   Unification.modulo_betaiota = false;
   Unification.modulo_eta = true;
+  Unification.with_cs = true;
 }
 
 (* Flags used for the setoid variant of "rewrite" and for the strategies

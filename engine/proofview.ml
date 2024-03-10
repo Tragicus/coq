@@ -232,10 +232,13 @@ module Proof = Logical
    - backtrack on previous changes of the proofview *)
 type +'a tactic = 'a Proof.t
 
+let debug_proofview = CDebug.create ~name:"proofview" ()
+
 (** Applies a tactic to the current proofview. *)
 let apply ~name ~poly env t sp =
   let open Logic_monad in
   let ans = Proof.repr (Proof.run t P.{trace=false; name; poly} (sp,env)) in
+  let () = debug_proofview (fun () -> Pp.(str "running monad with " ++ Termops.pr_evar_map None env (snd (proofview sp)))) in
   let ans = Logic_monad.NonLogical.run ans in
   match ans with
   | Nil (e, info) -> Exninfo.iraise (TacticFailure e, info)

@@ -1,0 +1,1 @@
+make lib && make install-lib && cd ~/Documents/phdliberabacistructures/coq-elpi && make clean && make build && make install && cd ~/Documents/phdliberabacistructures/hierarchy-builder && make clean && make build && make install && cd ~/Documents/phdliberabacistructures/presentationLiberAbaciTache7 && coqc sets.v && coqc demo.v

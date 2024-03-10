@@ -295,15 +295,18 @@ let clenv_missing ce = clenv_dependent_gen true ce.env ce.evd (clenv_type ce)
 (******************************************************************)
 
 let clenv_unify ?(flags=default_unify_flags ()) cv_pb t1 t2 clenv =
-  update_clenv_evd clenv (w_unify ~flags clenv.env clenv.evd cv_pb t1 t2)
+  let x = w_unify ~flags clenv.env clenv.evd cv_pb t1 t2 in
+  update_clenv_evd clenv x
 
 let clenv_unify_meta_types ?(flags=default_unify_flags ()) clenv =
-  update_clenv_evd clenv (w_unify_meta_types ~flags:flags clenv.env clenv.evd)
+  let x = w_unify_meta_types ~flags:flags clenv.env clenv.evd in
+  update_clenv_evd clenv x
 
 let clenv_unique_resolver ?(flags=default_unify_flags ()) clenv concl =
-  let (hd, _) = decompose_app clenv.evd (whd_nored clenv.env clenv.evd clenv.templtyp.rebus) in
-  let clenv = if isMeta clenv.evd hd then clenv_unify_meta_types ~flags clenv else clenv in
-  clenv_unify CUMUL ~flags (clenv_type clenv) concl clenv
+   let (hd, _) = decompose_app clenv.evd (whd_nored clenv.env clenv.evd clenv.templtyp.rebus) in
+let clenv = if isMeta clenv.evd hd then clenv_unify_meta_types ~flags clenv else clenv in
+  let x = clenv_unify CUMUL ~flags (clenv_type clenv) concl clenv in
+  x
 
 let adjust_meta_source evd mv = function
   | loc,Evar_kinds.VarInstance id ->
@@ -765,9 +768,12 @@ open Unification
 
 let dft = default_unify_flags
 
+let debug_clenv = CDebug.create ~name:"clenv" ()
+
 let res_pf ?(with_evars=false) ?(with_classes=true) ?(flags=dft ()) clenv =
   Proofview.Goal.enter begin fun gl ->
     let concl = Proofview.Goal.concl gl in
+    let () = debug_clenv (fun () -> Pp.(str "calling clenv_uniq_resolver " ++ Termops.pr_evar_map None clenv.env clenv.evd)) in
     let clenv = clenv_unique_resolver ~flags clenv concl in
     let sigma = pose_dependent_evars ~with_evars clenv.env clenv.evd (clenv_type clenv) in
     let sigma =
@@ -946,6 +952,7 @@ let fail_quick_core_unif_flags = {
   restrict_conv_on_strict_subterms = false; (* ? *)
   modulo_betaiota = false;
   modulo_eta = true;
+  with_cs = true;
 }
 
 let fail_quick_unif_flags = {

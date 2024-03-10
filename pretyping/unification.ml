@@ -32,6 +32,8 @@ open Locus
 open Locusops
 open Find_subterm
 
+let flag = ref false
+
 type metabinding = (metavariable * EConstr.constr * (instance_constraint * instance_typing_status))
 
 type subst0 =
@@ -47,7 +49,7 @@ let { Goptions.get = is_keyed_unification } =
     ~value:false
     ()
 
-let debug_tactic_unification = CDebug.create ~name:"tactic-unification" ()
+let debug_tactic_unification_flag, debug_tactic_unification = CDebug.create_full ~name:"tactic-unification" ()
 
 let occur_meta_or_undefined_evar evd c =
   (* This is performance-critical. Using the evar-insensitive API changes the
@@ -285,6 +287,9 @@ type core_unify_flags = {
 
   modulo_eta : bool;
     (* Support eta in the reduction *)
+
+  with_cs : bool;
+    (* Use canonical structures *)
 }
 
 type unify_flags = {
@@ -328,6 +333,7 @@ let default_core_unify_flags () =
   restrict_conv_on_strict_subterms = false;
   modulo_betaiota = true;
   modulo_eta = true;
+  with_cs = true;
  }
 
 let ts_var_full =
@@ -756,7 +762,9 @@ let fast_occur_meta_or_undefined_evar sigma (c, gnd) = match gnd with
 | NotGround -> true
 
 let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top env cv_pb flags m n =
+   let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_0_with_initial_metas with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
   let rec unirec_rec (curenv,nb as curenvnb) pb opt ((sigma,metasubst,evarsubst) as substn : subst0) ?(nargs=0) curm curn =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter unirec_rec with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let cM = Evarutil.whd_head_evar sigma curm
     and cN = Evarutil.whd_head_evar sigma curn in
     let () =
@@ -766,6 +774,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
     in
       match (EConstr.kind sigma cM, EConstr.kind sigma cN) with
         | Meta k1, Meta k2 ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "MM")) in
             if Int.equal k1 k2 then substn else
             let stM,stN = extract_instance_status pb in
             let sigma =
@@ -780,6 +789,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
             else sigma,(k2,cM,stM)::metasubst,evarsubst
         | Meta k, _
             when not (occur_metavariable sigma k cN) (* helps early trying alternatives *) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "MJ")) in
             let sigma =
               if opt.with_types && flags.check_applied_meta_types then
                 (try
@@ -790,6 +800,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
                    (* Renounce, maybe metas/evars prevents typing *) sigma)
               else sigma
             in
+            let () = try ignore (meta_opt_fvalue sigma k) with _ -> raise Stack_overflow in
             (* Here we check that [cN] does not contain any local variables *)
             if Int.equal nb 0 then
               sigma,(k,cN,snd (extract_instance_status pb))::metasubst,evarsubst
@@ -800,6 +811,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
             else error_cannot_unify_local curenv sigma (m,n,cN)
         | _, Meta k
             when not (occur_metavariable sigma k cM) (* helps early trying alternatives *) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JM")) in
           let sigma =
             if opt.with_types && flags.check_applied_meta_types then
               (try
@@ -821,6 +833,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         | Evar (evk,_ as ev), Evar (evk',_)
             when is_evar_allowed flags evk
               && Evar.equal evk evk' ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "EE")) in
             begin match constr_cmp cv_pb env sigma flags cM cN with
             | Some sigma ->
               sigma, metasubst, evarsubst
@@ -830,6 +843,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         | Evar (evk,_ as ev), _
             when is_evar_allowed flags evk
               && not (occur_evar sigma evk cN) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "EJ")) in
             let cmvars = free_rels sigma cM and cnvars = free_rels sigma cN in
               if Int.Set.subset cnvars cmvars then
                 sigma,metasubst,((curenvnb,ev,cN)::evarsubst)
@@ -837,11 +851,13 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         | _, Evar (evk,_ as ev)
             when is_evar_allowed flags evk
               && not (occur_evar sigma evk cM) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JE")) in
             let cmvars = free_rels sigma cM and cnvars = free_rels sigma cN in
               if Int.Set.subset cmvars cnvars then
                 sigma,metasubst,((curenvnb,ev,cM)::evarsubst)
               else error_cannot_unify_local curenv sigma (m,n,cN)
         | Sort s1, Sort s2 ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "SS")) in
             (try
                let sigma' =
                  if pb == CUMUL
@@ -852,17 +868,24 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
                error_cannot_unify curenv sigma (fst m,fst n))
 
         | Lambda (na,t1,c1), Lambda (__,t2,c2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "LL")) in
             unirec_rec (push (na,t1) curenvnb) CONV {opt with at_top = true}
               (unirec_rec curenvnb CONV {opt with at_top = true; with_types = false} substn t1 t2) c1 c2
         | Prod (na,t1,c1), Prod (_,t2,c2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "PP")) in
             unirec_rec (push (na,t1) curenvnb) pb {opt with at_top = true}
               (unirec_rec curenvnb CONV {opt with at_top = true; with_types = false} substn t1 t2) c1 c2
-        | LetIn (_,a,_,c), _ -> unirec_rec curenvnb pb opt substn (subst1 a c) cN
-        | _, LetIn (_,a,_,c) -> unirec_rec curenvnb pb opt substn cM (subst1 a c)
+        | LetIn (_,a,_,c), _ ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "LIJ")) in
+              unirec_rec curenvnb pb opt substn (subst1 a c) cN
+        | _, LetIn (_,a,_,c) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JLI")) in
+              unirec_rec curenvnb pb opt substn cM (subst1 a c)
 
         (* Fast path for projections. *)
         | Proj (p1,_,c1), Proj (p2,_,c2) when Environ.QConstant.equal env
             (Projection.constant p1) (Projection.constant p2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "PjPj")) in
           (try unify_same_proj curenvnb cv_pb {opt with at_top = true}
                substn c1 c2
            with ex when precatchable_exception ex ->
@@ -870,9 +893,11 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
 
         (* eta-expansion *)
         | Lambda (na,t1,c1), _ when flags.modulo_eta ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "LJ")) in
             unirec_rec (push (na,t1) curenvnb) CONV {opt with at_top = true} substn
               c1 (mkApp (lift 1 cN,[|mkRel 1|]))
         | _, Lambda (na,t2,c2) when flags.modulo_eta ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JL")) in
             unirec_rec (push (na,t2) curenvnb) CONV {opt with at_top = true} substn
               (mkApp (lift 1 cM,[|mkRel 1|])) c2
 
@@ -881,6 +906,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
             (* This ensures cN is an evar, meta or irreducible constant/variable
                and not a constructor. *)
             is_eta_constructor_app curenv sigma flags.modulo_delta f1 l1 cN ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "AJ")) in
           (try
              let opt' = {opt with at_top = true; with_cs = false} in
              let (sigma, _, _) as substn = check_type_eta_constructor_app curenvnb opt' substn cM cN in
@@ -896,6 +922,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
 
         | _, App (f2, l2) when flags.modulo_eta &&
             is_eta_constructor_app curenv sigma flags.modulo_delta f2 l2 cM ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JA")) in
           (try
              let opt' = {opt with at_top = true; with_cs = false} in
              let (sigma, _, _) as substn = check_type_eta_constructor_app curenvnb opt' substn cN cM in
@@ -910,6 +937,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
              | _ -> raise ex)
 
         | Case (ci1, u1, pms1, p1, iv1, c1, cl1), Case (ci2, u2, pms2, (p2,_), iv2, c2, cl2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "CC")) in
             (try
              let () = if not (QInd.equal curenv ci1.ci_ind ci2.ci_ind) then error_cannot_unify curenv sigma (cM,cN) in
              let opt' = {opt with at_top = true; with_types = false} in
@@ -927,6 +955,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
 
         | Fix ((ln1,i1),(lna1,tl1,bl1)), Fix ((ln2,i2),(_,tl2,bl2)) when
                Int.equal i1 i2 && Array.equal Int.equal ln1 ln2 ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "FF")) in
             (try
              let opt' = {opt with at_top = true; with_types = false} in
              let curenvnb' = Array.fold_right2 (fun na t -> push (na,t)) lna1 tl1 curenvnb in
@@ -937,6 +966,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
 
         | CoFix (i1,(lna1,tl1,bl1)), CoFix (i2,(_,tl2,bl2)) when
                Int.equal i1 i2 ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "CFCF")) in
             (try
              let opt' = {opt with at_top = true; with_types = false} in
              let curenvnb' = Array.fold_right2 (fun na t -> push (na,t)) lna1 tl1 curenvnb in
@@ -948,26 +978,33 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         | App (f1,l1), _ when
             (isMeta sigma f1 && use_metas_pattern_unification sigma flags nb l1
             || use_evars_pattern_unification flags && isAllowedEvar sigma flags f1) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "AJ2")) in
           unify_app_pattern true curenvnb pb opt substn cM f1 l1 cN cN [||]
 
         | _, App (f2,l2) when
             (isMeta sigma f2 && use_metas_pattern_unification sigma flags nb l2
             || use_evars_pattern_unification flags && isAllowedEvar sigma flags f2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "JA2")) in
           unify_app_pattern false curenvnb pb opt substn cM cM [||] cN f2 l2
 
         | App (f1,l1), App (f2,l2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "AA2")) in
           unify_app curenvnb pb opt substn cM f1 l1 cN f2 l2
 
         | App (f1,l1), Proj(p2,_,c2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "AA3")) in
           unify_app curenvnb pb opt substn cM f1 l1 cN cN [||]
 
         | Proj (p1,_,c1), App(f2,l2) ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "PA")) in
           unify_app curenvnb pb opt substn cM cM [||] cN f2 l2
 
         | _ ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "J")) in
           unify_not_same_head curenvnb pb opt substn ~nargs cM cN
 
   and check_type_eta_constructor_app (env,nb as curenvnb) opt ((sigma,metasubst,evarsubst) as substn : subst0) other term =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter check_type_eta_constructor_app with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let  (((_, i as ind), j), u) =
       EConstr.destConstruct sigma (fst (decompose_app sigma other))
     in
@@ -989,7 +1026,8 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         in
         unirec_rec curenvnb CONV opt ~nargs:0 substn tother tterm
 
-  and unify_app_pattern dir curenvnb pb opt (sigma, _, _ as substn) cM f1 l1 cN f2 l2 =
+  and unify_app_pattern dir curenvnb pb opt (sigma, metasubst, _ as substn) cM f1 l1 cN f2 l2 =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_app_pattern with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let f, l, t = if dir then f1, l1, cN else f2, l2, cM in
       match is_unification_pattern curenvnb sigma f (Array.to_list l) t with
       | None ->
@@ -1005,6 +1043,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         solve_pattern_eqn_array curenvnb f l t substn
 
   and unify_app (curenv, nb as curenvnb) pb opt (sigma, metas, evars as substn : subst0) cM f1 l1 cN f2 l2 =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_app  with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     try
       let needs_expansion p c' =
         match EConstr.kind sigma c' with
@@ -1029,8 +1068,8 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
       let (f1,l1,f2,l2) = adjust_app_array_size f1 l1 f2 l2 in
         if Array.length l1 == 0 then error_cannot_unify (fst curenvnb) sigma (cM,cN)
         else
-          Array.fold_left2 (unirec_rec curenvnb CONV opta ~nargs:0)
-            (unirec_rec curenvnb CONV optf substn f1 f2 ~nargs:(Array.length l1)) l1 l2
+          let substn = unirec_rec curenvnb CONV optf substn f1 f2 ~nargs:(Array.length l1) in
+          Array.fold_left2 (unirec_rec curenvnb CONV opta ~nargs:0) substn l1 l2
     with ex when precatchable_exception ex ->
     try reduce curenvnb pb {opt with with_types = false} substn cM cN
     with ex when precatchable_exception ex ->
@@ -1038,7 +1077,8 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
     with ex when precatchable_exception ex ->
     expand curenvnb pb {opt with with_types = false} substn cM f1 l1 cN f2 l2
 
-  and unify_same_proj (curenv, nb as curenvnb) cv_pb opt substn c1 c2 =
+  and unify_same_proj (curenv, nb as curenvnb) cv_pb opt (_, metas, _ as substn) c1 c2 =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_same_proj  with" ++ str (if metas = [] then "no" else "some") ++ str "metas")) in
     let substn = unirec_rec curenvnb CONV opt substn c1 c2 in
       try (* Force unification of the types to fill in parameters *)
         let ty1 = get_type_of curenv ~lax:true sigma c1 in
@@ -1052,6 +1092,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
       with RetypeError _ -> substn
 
   and unify_not_same_head curenvnb pb opt (sigma, metas, evars as substn : subst0) ~nargs cM cN =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_not_same_head with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     try canonical_projections curenvnb pb opt cM cN substn
     with ex when precatchable_exception ex ->
     match constr_cmp cv_pb env sigma flags ~nargs cM cN with
@@ -1066,6 +1107,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
           expand curenvnb pb opt substn cM f1 l1 cN f2 l2
 
   and reduce curenvnb pb opt (sigma, metas, evars as substn) cM cN =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter reduce with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     if flags.modulo_betaiota && not (subterm_restriction opt flags) then
       let cM' = do_reduce flags.modulo_delta curenvnb sigma cM in
         if not (EConstr.eq_constr sigma cM cM') then
@@ -1078,6 +1120,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
     else error_cannot_unify (fst curenvnb) sigma (cM,cN)
 
   and expand (curenv,_ as curenvnb) pb opt (sigma,metasubst,evarsubst as substn : subst0) cM f1 l1 cN f2 l2 =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter expand with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let res =
       (* Try full conversion on meta-free terms. *)
       (* Back to 1995 (later on called trivial_unify in 2002), the
@@ -1156,7 +1199,8 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
                 | None ->
                     error_cannot_unify curenv sigma (cM,cN)))
 
-  and canonical_projections (curenv, _ as curenvnb) pb opt cM cN (sigma,_,_ as substn) =
+  and canonical_projections (curenv, _ as curenvnb) pb opt cM cN (sigma,metasubst,_ as substn) =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter canonical_projections with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let f1 () =
       if isApp_or_Proj sigma cM then
           if CanonicalSolution.is_open_canonical_projection curenv sigma cM then
@@ -1179,12 +1223,17 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
           else error_cannot_unify (fst curenvnb) sigma (cM,cN)
 
   and solve_canonical_projection curenvnb pb opt cM cN (sigma,ms,es) =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter solve_canonical_projection with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let f1l1 = whd_nored_state (fst curenvnb) sigma (cM,Stack.empty) in
     let f2l2 = whd_nored_state (fst curenvnb) sigma (cN,Stack.empty) in
+    let () = flag := true in
     let (sigma,t,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) =
       try Evarconv.check_conv_record (fst curenvnb) sigma f1l1 f2l2
-      with Not_found -> error_cannot_unify (fst curenvnb) sigma (cM,cN)
+      with | Not_found -> let () = flag := false in error_cannot_unify (fst curenvnb) sigma (cM,cN)
+      | e -> let () = flag := false in raise e
     in
+    let () = flag := false in
+    let () = debug_tactic_unification (fun () -> Pp.(str "exit check_conv record with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     if Reductionops.Stack.compare_shape ts ts1 then
       let (evd,ks,_) =
         List.fold_left
@@ -1197,6 +1246,7 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
               (evd', mkMeta mv :: ks, m - 1))
           (sigma,[],List.length bs) bs
       in
+      let () = debug_tactic_unification (fun () -> Pp.(str "finished processing bs with" ++ str (if Metamap.is_empty (Evd.meta_list evd) then "no" else "some") ++ str "metas")) in
       try
       let opt' = {opt with with_types = false} in
       let fold u1 u s = unirec_rec curenvnb pb opt' s u1 (substl ks u) in
@@ -1205,9 +1255,17 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         with Invalid_argument _ -> assert false (* check_conv_record ensures lengths coincide *)
       in
       let substn = foldl (evd,ms,es) us2 us in
+      let (sigma1, _, _) = substn in
       let substn = foldl substn params1 params in
+      let (sigma2, _, _) = substn in
       let substn = Reductionops.Stack.fold2 (fun s u1 u2 -> unirec_rec curenvnb pb opt' s u1 u2) substn ts ts1 in
+      let (sigma3, _, _) = substn in
       let app = mkApp (c, Array.rev_of_list ks) in
+      let is_empty sigma = if Metamap.is_empty (Evd.meta_list sigma) then "empty" else "not empty" in
+      let () = debug_tactic_unification (fun () -> Pp.(str "sigma " ++ str (is_empty sigma) ++ cut () ++
+        str "sigma1 " ++ str (is_empty sigma1) ++ cut () ++
+        str "sigma2 " ++ str (is_empty sigma2) ++ cut () ++
+        str "sigma3 " ++ str (is_empty sigma3))) in
       (* let substn = unirec_rec curenvnb pb b false substn t cN in *)
         unirec_rec curenvnb pb opt' substn c1 app
       with Reductionops.Stack.IncompatibleFold2 ->
@@ -1218,9 +1276,10 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
   debug_tactic_unification (fun () ->
       str "Starting unification:" ++ spc() ++
       Termops.Internal.print_constr_env env sigma (fst m) ++ strbrk" ~= " ++
-      Termops.Internal.print_constr_env env sigma (fst n));
+      Termops.Internal.print_constr_env env sigma (fst n) ++ spc() ++
+      Termops.pr_evar_map None env sigma);
 
-  let opt = { at_top = conv_at_top; with_types = false; with_cs = true } in
+  let opt = { at_top = conv_at_top; with_types = false; with_cs = flags.with_cs } in
   try
   let res =
     if subterm_restriction opt flags ||
@@ -1250,7 +1309,10 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
     a
   with e ->
     let e = Exninfo.capture e in
-    debug_tactic_unification (fun () -> str "Leaving unification with failure");
+    debug_tactic_unification (fun () -> str "Leaving unification with failure" ++ spc () ++
+      Termops.Internal.print_constr_env env sigma (fst m) ++ strbrk" ~= " ++
+      Termops.Internal.print_constr_env env sigma (fst n) ++ spc () ++
+      str "had " ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str " metas");
     Exninfo.iraise e
 
 let unify_0 env sigma pb flags c1 c2 =
@@ -1454,11 +1516,13 @@ let solve_simple_evar_eqn flags env evd ev rhs =
    is true, unification of types of metas is required *)
 
 let w_merge env with_types flags (evd,metas,evars : subst0) =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter w_merge with " ++ str (if Metamap.is_empty (Evd.meta_list evd) then "no" else "some") ++ str " metas")) in
   let eflags = Evarconv.default_flags_of flags.modulo_delta_types in
   let rec w_merge_rec evd metas evars eqns =
+    let () = debug_tactic_unification (fun () -> Pp.(str "enter w_merge_rec with " ++ str (if Metamap.is_empty (Evd.meta_list evd) then "no" else "some") ++ str " metas")) in
 
     (* Process evars *)
-    match evars with
+    let r = match evars with
     | ((curenv,nb),(evk,_ as ev),rhs)::evars' ->
         if Evd.is_defined evd evk then
           let v = mkEvar ev in
@@ -1510,7 +1574,7 @@ let w_merge env with_types flags (evd,metas,evars : subst0) =
           else
             ((evd,c),([],[])),eqns
         in
-        begin match meta_opt_fvalue evd mv with
+        begin match try meta_opt_fvalue evd mv with _ -> raise Stack_overflow with
         | Some ({ rebus = c' }, (status', _)) ->
             let (take_left,st,(evd,metas',evars')) =
               merge_instances env evd flags status' status c' c
@@ -1543,7 +1607,10 @@ let w_merge env with_types flags (evd,metas,evars : subst0) =
               (match failures with
                | [] -> evd
                | ((mv,status,c),e)::_ -> raise e)
-        in process_eqns [] eqns
+        in try process_eqns [] eqns with e ->
+          raise e
+  in let () = debug_tactic_unification (fun () -> Pp.(str "leave w_merge_rec"))
+  in r
 
   and mimick_undefined_evar evd flags hdc args sp =
     let ev = Evd.find_undefined evd sp in
@@ -1570,7 +1637,9 @@ let w_merge env with_types flags (evd,metas,evars : subst0) =
                 (* Assign evars in the order of assignments during unification *)
                 (List.rev evars) []
   in
-  if with_types then check_types res else res
+  let r = if with_types then check_types res else res in
+  let () = debug_tactic_unification (fun () -> Pp.(str "leave w_merge")) in
+  r
 
 let w_unify_meta_types env ?(flags=default_unify_flags ()) evd =
   let metas,evd = retract_coercible_metas evd in
@@ -1612,14 +1681,19 @@ let try_resolve_typeclasses env evd flag m n =
   else evd
 
 let w_unify_core_0 env evd with_types cv_pb flags m n =
+  let () = debug_tactic_unification (fun () -> Pp.(str "enter w_unify_core_0" ++ Termops.pr_evar_map None env evd)) in
   let (mc1,evd') = retract_coercible_metas evd in
+  let () = debug_tactic_unification (fun () -> Pp.(str (if mc1 = [] then "metabinding list empty" else "metabinding list not empty"))) in
   let (sigma,ms,es) = check_types env (set_flags_for_type flags.core_unify_flags) (evd',mc1,[]) (fst m) (fst n) in
+  let () = debug_tactic_unification (fun () -> Pp.(str (if mc1 = [] then "ms empty" else "ms not empty"))) in
   let subst2 =
      unify_0_with_initial_metas (sigma,ms,es) false env cv_pb
        flags.core_unify_flags m n
   in
   let evd = w_merge env with_types flags.merge_unify_flags subst2 in
-  try_resolve_typeclasses env evd flags.resolve_evars m n
+  let r = try_resolve_typeclasses env evd flags.resolve_evars m n in
+  let () = debug_tactic_unification (fun () -> Pp.(str "leave w_unify_core_0")) in
+  r
 
 let w_typed_unify env evd = w_unify_core_0 env evd true
 
@@ -1672,6 +1746,7 @@ let default_matching_core_flags sigma =
   restrict_conv_on_strict_subterms = false;
   modulo_betaiota = false;
   modulo_eta = false;
+  with_cs = true;
 }
 
 let default_matching_merge_flags sigma =
@@ -1725,6 +1800,7 @@ let make_pattern_test from_prefix_of_ind is_correct_type env sigma (pending,c) =
           if not (List.for_all (fun c -> Vars.closed0 sigma c) l2) then raise NotUnifiable
           else applist (t,l1), l2
         else t, [] in
+      let () = debug_tactic_unification (fun () -> str "make_pattern_test to w_typed_unify") in
       let sigma = w_typed_unify env sigma Conversion.CONV flags (c, cgnd) (t', Unknown) in
       let ty = Retyping.get_type_of env sigma t in
       if is_correct_type ty then Result.Ok (sigma, t, l2)
@@ -2015,7 +2091,9 @@ let w_unify_to_subterm env evd ?(flags=default_unify_flags ()) (op,cl) =
            let f1, l1 = decompose_app evd op in
            let f2, l2 = decompose_app evd cl in
            w_typed_unify_array env evd flags f1 l1 f2 l2,cl
-         else w_typed_unify env evd CONV flags (op, opgnd) (cl, Unknown),cl
+         else
+            let () = debug_tactic_unification (fun () -> str "w_unify_to_subterm to w_typed_unify") in
+            w_typed_unify env evd CONV flags (op, opgnd) (cl, Unknown),cl
        with ex when Pretype_errors.unsatisfiable_exception ex ->
             bestexn := Some ex; user_err Pp.(str "Unsat"))
        else user_err Pp.(str "Bound 1")
@@ -2068,7 +2146,9 @@ let w_unify_to_subterm_all env evd ?(flags=default_unify_flags ()) (op,cl) =
     let cl = strip_outer_cast evd cl in
       (bind
           (if closed0 evd cl
-          then return (fun () -> w_typed_unify env evd CONV flags (op, opgnd) (cl, Unknown),cl)
+          then return (fun () ->
+             let () = debug_tactic_unification (fun () -> str "w_unify_to_subterm_all to w_typed_unify") in
+             w_typed_unify env evd CONV flags (op, opgnd) (cl, Unknown),cl)
             else fail "Bound 1")
           (match EConstr.kind evd cl with
             | App (f,args) ->
@@ -2251,7 +2331,10 @@ let w_unify env evd cv_pb ?(flags=default_unify_flags ()) ty1 ty2 =
                       raise ex)
 
       (* General case: try first order *)
-      | _ -> w_typed_unify env evd cv_pb flags (ty1, Unknown) (ty2, Unknown)
+      | _ ->
+            let () = debug_tactic_unification (fun () -> Pp.(str "w_unify general case on: " ++ Termops.Internal.print_constr_env env evd ty1 ++ cut () ++ Termops.Internal.print_constr_env env evd ty2) ++ cut () ++ Termops.pr_evar_map None env evd) in
+            let () = if !flag && CDebug.get_flag debug_tactic_unification_flag && Metamap.is_empty (Evd.meta_list evd) then raise Stack_overflow else () in
+            w_typed_unify env evd cv_pb flags (ty1, Unknown) (ty2, Unknown)
 
 (* Profiling *)
 

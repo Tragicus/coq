@@ -100,6 +100,7 @@ let rewrite_core_unif_flags = {
   restrict_conv_on_strict_subterms = false;
   modulo_betaiota = false;
   modulo_eta = true;
+  with_cs = true;
 }
 
 let rewrite_unif_flags = {
@@ -164,6 +165,7 @@ let rewrite_conv_closed_core_unif_flags = {
   restrict_conv_on_strict_subterms = false;
   modulo_betaiota = false;
   modulo_eta = true;
+  with_cs = true;
 }
 
 let rewrite_conv_closed_unif_flags = {
@@ -199,6 +201,7 @@ let rewrite_keyed_core_unif_flags = {
   modulo_betaiota = true;
 
   modulo_eta = true;
+  with_cs = true;
 }
 
 let rewrite_keyed_unif_flags = {

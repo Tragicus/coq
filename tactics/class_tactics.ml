@@ -138,6 +138,7 @@ let auto_core_unif_flags st allowed_evars = {
   restrict_conv_on_strict_subterms = false; (* ? *)
   modulo_betaiota = true;
   modulo_eta = false;
+  with_cs = true;
 }
 
 let auto_unif_flags ?(allowed_evars = Evarsolve.AllowedEvars.all) st =
@@ -317,8 +318,21 @@ and e_my_find_search db_list local_db secvars hdc complete only_classes env sigm
     let hintl =
       CList.map
         (fun (db, m, tacs) ->
-          let flags = auto_unif_flags ~allowed_evars (Hint_db.transparent_state db) in
-          m, List.map (fun x -> tac_of_hint (flags, x)) tacs)
+          let flags = auto_core_unif_flags (Hint_db.transparent_state db) allowed_evars in
+          m, List.map (fun x ->
+             let flags = match FullHint.name x with
+             | Some (GlobRef.ConstRef c) -> let () = ppdebug 0 Pp.(fun () -> str "hint name: " ++ GlobRef.print (GlobRef.ConstRef c)) in
+               let () = if Structures.Structure.is_projection c then ppdebug 0 Pp.(fun () -> str "remove cs from flags") else () in
+               {flags with with_cs = not (Structures.Structure.is_projection c)}
+             | _ -> flags in
+           let flags = {
+             core_unify_flags = flags;
+             merge_unify_flags = flags;
+             subterm_unify_flags = flags;
+             allow_K_in_toplevel_higher_order_unification = false;
+             resolve_evars = false
+           } in
+           tac_of_hint (flags, x)) tacs)
         hintl
     in
     let modes, hintl = List.split hintl in

@@ -26,6 +26,7 @@ type core_unify_flags = {
   restrict_conv_on_strict_subterms : bool;
   modulo_betaiota : bool;
   modulo_eta : bool;
+  with_cs : bool;
 }
 
 type unify_flags = {
