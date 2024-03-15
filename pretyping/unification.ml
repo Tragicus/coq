@@ -1070,12 +1070,14 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
         else
           let substn = unirec_rec curenvnb CONV optf substn f1 f2 ~nargs:(Array.length l1) in
           Array.fold_left2 (unirec_rec curenvnb CONV opta ~nargs:0) substn l1 l2
+    with | ex when precatchable_exception ex ->
+    (try reduce curenvnb pb {opt with with_types = false} substn cM cN
     with ex when precatchable_exception ex ->
-    try reduce curenvnb pb {opt with with_types = false} substn cM cN
-    with ex when precatchable_exception ex ->
+        let () = debug_tactic_unification (fun () -> Pp.(str "trying canonical projections")) in
     try canonical_projections curenvnb pb opt cM cN substn
     with ex when precatchable_exception ex ->
-    expand curenvnb pb {opt with with_types = false} substn cM f1 l1 cN f2 l2
+    expand curenvnb pb {opt with with_types = false} substn cM f1 l1 cN f2 l2)
+        | e -> let () = debug_tactic_unification (fun () -> Pp.(str "uncatchable exception in unify_app")) in raise e
 
   and unify_same_proj (curenv, nb as curenvnb) cv_pb opt (_, metas, _ as substn) c1 c2 =
     let () = debug_tactic_unification (fun () -> Pp.(str "enter unify_same_proj  with" ++ str (if metas = [] then "no" else "some") ++ str "metas")) in
@@ -1202,17 +1204,17 @@ let rec unify_0_with_initial_metas (sigma,ms,es as subst : subst0) conv_at_top e
   and canonical_projections (curenv, _ as curenvnb) pb opt cM cN (sigma,metasubst,_ as substn) =
     let () = debug_tactic_unification (fun () -> Pp.(str "enter canonical_projections with" ++ str (if Metamap.is_empty (Evd.meta_list sigma) then "no" else "some") ++ str "metas")) in
     let f1 () =
-      if isApp_or_Proj sigma cM then
-          if CanonicalSolution.is_open_canonical_projection curenv sigma cM then
+      if isApp_or_Proj sigma cM && (let () = debug_tactic_unification (fun () -> Pp.(str "isApp_or_Proj")) in true) then
+          if CanonicalSolution.is_open_canonical_projection curenv sigma cM && (let () = debug_tactic_unification (fun () -> Pp.(str "is_open_canonical_&rojection")) in true) then
             solve_canonical_projection curenvnb pb opt cM cN substn
           else error_cannot_unify (fst curenvnb) sigma (cM,cN)
       else error_cannot_unify (fst curenvnb) sigma (cM,cN)
     in
-      if not opt.with_cs ||
+      if not opt.with_cs || (let () = debug_tactic_unification (fun () -> Pp.(str "have cs flag")) in false) ||
         begin match flags.modulo_conv_on_closed_terms with
         | None -> true
         | Some _ -> subterm_restriction opt flags
-        end then
+        end || (let () = debug_tactic_unification (fun () -> Pp.(str "have modulo_conv_on_closed_terms flag")) in false) then
         error_cannot_unify (fst curenvnb) sigma (cM,cN)
       else
         try f1 () with e when precatchable_exception e ->

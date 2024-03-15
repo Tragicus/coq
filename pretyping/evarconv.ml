@@ -48,6 +48,7 @@ let default_flags env =
   default_flags_of ts
 
 let debug_unification = CDebug.create ~name:"unification" ()
+let debug_unification_evar_map = CDebug.create ~name:"unification-evmap" ()
 
 let debug_ho_unification = CDebug.create ~name:"ho-unification" ()
 
@@ -341,6 +342,8 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
        | None -> raise Not_found
 
   in
+  let () = debug_unification (fun () -> Pp.(v 0 (str "check_conv_record"))) in
+  let () = debug_unification (fun () -> Pp.(v 0 (Structures.CanonicalSolution.print env sigma solution))) in
   let t2 = Stack.zip sigma (h2, (Stack.append_app_list args2 Stack.empty)) in
   let h, _ = decompose_app sigma solution.body in
     sigma,(h, h2),solution.constant,solution.abstractions_ty,(solution.params,params1),
@@ -914,6 +917,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
   let app_empty = match sk1, sk2 with [], [] -> true | _ -> false in
   (* Evar must be undefined since we have flushed evars *)
   let () = debug_unification (fun () -> Pp.(v 0 (pr_state env evd appr1 ++ cut () ++ pr_state env evd appr2 ++ cut ()))) in
+  let () = debug_unification_evar_map (fun () -> Pp.(v 0 (str "sigma = " ++ Termops.pr_evar_map None env evd))) in
   match (flex_kind_of_term flags env evd term1 sk1,
          flex_kind_of_term flags env evd term2 sk2) with
     | Flexible (sp1,al1), Flexible (sp2,al2) ->
@@ -1280,6 +1284,25 @@ and conv_record flags env (evd,(h,h2),c,bs,(params,params1),(us,us2),(sk1,sk2),c
 
      had to be initially resolved
   *)
+  let pr_econstr = Termops.Internal.debug_print_constr evd in
+  let pr_econstr_list l = Pp.(str "[ " ++ prlist_with_sep (fun () -> str "; ") pr_econstr l ++ str " ]") in
+  let hh = h in
+  let () = debug_unification (fun () -> Pp.(str "enter conv_record with" ++ cut () ++
+    str "sigma = " ++ Termops.pr_evar_map None env evd ++ cut () ++
+    str "h = " ++ pr_econstr hh ++ cut () ++
+    str "h2 = " ++ pr_econstr h2 ++ cut () ++
+    str "c = " ++ pr_econstr c ++ cut () ++
+    str "bs = " ++ pr_econstr_list bs ++ cut () ++
+    str "params = " ++ pr_econstr_list params ++ cut () ++
+    str "params1 = " ++ pr_econstr_list params1 ++ cut () ++
+    str "us = " ++ pr_econstr_list us ++ cut () ++
+    str "us2 = " ++ pr_econstr_list us2 ++ cut () ++
+    str "sk1 = " ++ Reductionops.Stack.pr pr_econstr sk1 ++ cut () ++
+    str "sk2 = " ++ Reductionops.Stack.pr pr_econstr sk2 ++ cut () ++
+    str "c1 = " ++ pr_econstr c1 ++ cut () ++
+    str "n = " ++ pr_opt int n ++ cut () ++
+    str "t2 = " ++ pr_econstr t2
+    )) in
   if Reductionops.Stack.compare_shape sk1 sk2 then
     let (evd',ks,_,test) =
       List.fold_left

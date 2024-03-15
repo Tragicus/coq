@@ -25,7 +25,7 @@ module CompactedDecl = Context.Compacted.Declaration
 
 module Internal = struct
 
-  let debug_print_constr sigma c = Constr.debug_print (EConstr.to_constr sigma c)
+  let debug_print_constr _sigma c = Constr.debug_print (EConstr.Unsafe.to_constr c)
   let fallback_printer _env sigma c = debug_print_constr sigma c
   let term_printer = ref fallback_printer
 
