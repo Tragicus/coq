@@ -124,7 +124,7 @@ type t = {
     The solution s gets a fresh universe instance and is decomposed into
     bits for consumption by evarconv. Can raise [Not_found] on failure *)
 val find :
-  Environ.env -> Evd.evar_map -> (Names.GlobRef.t * ValuePattern.t) ->
+  Environ.env -> Evd.evar_map -> (Names.GlobRef.t * EConstr.t) ->
     Evd.evar_map * t
 
 (** [is_open_canonical_projection env sigma t] is true if t is a FieldName

@@ -537,6 +537,13 @@ sig
   val relevance_eq : (ERelevance.t, Sorts.relevance) eq
 end
 
+module Map : sig
+  val empty : 'a ConstrMap.t
+  val find : t -> 'a ConstrMap.t -> 'a
+  val add : t -> 'a -> 'a ConstrMap.t -> 'a ConstrMap.t
+  type !+'a t = 'a ConstrMap.t
+end
+
 (** Deprecated *)
 
 val decompose_lambda_assum : Evd.evar_map -> t -> rel_context * t

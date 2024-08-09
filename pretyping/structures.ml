@@ -189,10 +189,8 @@ let print = function
 
 end
 
-module PatMap = Map.Make(ValuePattern)
-
 let object_table =
-  Summary.ref (GlobRef.Map.empty : (constr * obj_typ) PatMap.t GlobRef.Map.t)
+  Summary.ref (GlobRef.Map.empty : (constr * obj_typ) EConstr.Map.t GlobRef.Map.t)
     ~name:"record-canonical-structs"
 
 let keep_true_projections projs =
@@ -237,7 +235,7 @@ let compute_canonical_projections env sigma ~warn (gref,ind) =
         Option.cata (fun proji_sp ->
             match ValuePattern.of_constr sigma (EConstr.of_constr t) with
             | patt, o_INJ, o_TCOMPS ->
-              ((GlobRef.ConstRef proji_sp, (patt, t)),
+              ((GlobRef.ConstRef proji_sp, t),
                { o_ORIGIN = gref ; o_DEF ; o_CTX ; o_INJ ; o_TABS ; o_TPARAMS ; o_NPARAMS ; o_TCOMPS = List.map EConstr.Unsafe.to_constr o_TCOMPS })
               :: acc
             | exception DestKO ->
@@ -314,18 +312,19 @@ let make env sigma ref =
 
 let register ~warn env sigma o =
     compute_canonical_projections env sigma ~warn o |>
-    List.iter (fun ((proj, (cs_pat, t)), s) ->
-      let l = try GlobRef.Map.find proj !object_table with Not_found -> PatMap.empty in
-      match PatMap.find cs_pat l with
+    List.iter (fun ((proj, t), s) ->
+      let cs_pat = EConstr.of_constr t in
+      let l = try GlobRef.Map.find proj !object_table with Not_found -> EConstr.Map.empty in
+      match EConstr.Map.find cs_pat l with
       | exception Not_found ->
-          object_table := GlobRef.Map.add proj (PatMap.add cs_pat (t, s) l) !object_table
+          object_table := GlobRef.Map.add proj (EConstr.Map.add cs_pat (t, s) l) !object_table
       | _, cs ->
         if warn
         then
           let old_can_s = Termops.Internal.print_constr_env env sigma (EConstr.of_constr cs.o_DEF) in
           let new_can_s = Termops.Internal.print_constr_env env sigma (EConstr.of_constr s.o_DEF) in
           let prj = Nametab.pr_global_env Id.Set.empty proj in
-          let hd_val = ValuePattern.print cs_pat in
+          let hd_val = Termops.Internal.print_constr_env env sigma cs_pat in
           warn_redundant_canonical_projection (hd_val, prj, new_can_s, old_can_s)
       )
 
@@ -353,7 +352,7 @@ type t = {
 
 let find env sigma (proj,pat) =
   let t', { o_DEF = c; o_CTX = ctx; o_INJ=n; o_TABS = bs;
-        o_TPARAMS = params; o_NPARAMS = nparams; o_TCOMPS = us } = PatMap.find pat (GlobRef.Map.find proj !object_table) in
+        o_TPARAMS = params; o_NPARAMS = nparams; o_TCOMPS = us } = EConstr.Map.find pat (GlobRef.Map.find proj !object_table) in
   let us = List.map EConstr.of_constr us in
   let params = List.map EConstr.of_constr params in
   let u, ctx' = UnivGen.fresh_instance_from ctx None in
@@ -429,13 +428,13 @@ let canonical_entry_of_object projection value (_, { o_ORIGIN = solution }) =
 
 let entries () =
   GlobRef.Map.fold (fun p ol acc ->
-    PatMap.fold (fun pat o acc -> canonical_entry_of_object p pat o :: acc) ol acc)
+    EConstr.Map.fold (fun pat o acc -> canonical_entry_of_object p pat o :: acc) ol acc)
     !object_table []
 
 let entries_for ~projection:p =
   try
     GlobRef.Map.find p !object_table |>
-    PatMap.bindings |>
+    EConstr.Map.bindings |>
     List.map (fun (pat, o) -> canonical_entry_of_object p pat o)
   with Not_found -> []
 

@@ -1169,3 +1169,10 @@ let decompose_lam_n_decls = decompose_lambda_n_decls
 let decompose_lam_assum = decompose_lambda_assum
 
 include UnsafeMonomorphic
+
+module Map = struct
+  type 'a t = 'a ConstrMap.t
+  let empty = ConstrMap.empty
+  let find k s = ConstrMap.find (Unsafe.to_constr k) s
+  let add k x s = ConstrMap.add (Unsafe.to_constr k) x s
+end

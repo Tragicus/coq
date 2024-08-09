@@ -329,16 +329,9 @@ let check_conv_record env sigma (t1,sk1) (t2,sk2) =
   let (pat, _, args2') = try ValuePattern.of_constr sigma h2 with | DestKO -> (Default_cs, None, []) in
   let (sigma, solution), sk2_effective =
      (* N.B. In the `Proj` case, the subject needs to be added in args2. *)
-    try begin
-      try
-         let () = if pat = Default_cs then raise Not_found else () in
-         let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, pat) in
-         if List.length solution.cvalue_arguments = k + (List.length args2') then (sigma, solution), args2' @ args2 else raise Not_found
-       with | Not_found ->
-         let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, Default_cs) in
-         (* We have to drop the arguments args2 because the default solution does not have them. *)
-         if List.length solution.cvalue_arguments = 0 then (sigma, solution), [] else raise Not_found
-      end
+    try
+      let (sigma, solution) = CanonicalSolution.find env sigma (Names.GlobRef.ConstRef proji, Reductionops.Stack.zip sigma (h2, sk2)) in
+      if List.length solution.cvalue_arguments = k + (List.length args2') then (sigma, solution), args2' @ args2 else raise Not_found
     with | Not_found -> (* If we find no solution, we ask the hook if it has any. *)
       match (apply_hooks env sigma ((proji, u), params1, c1) (t2, args2)) with
       | Some r -> r, args2' @ args2
