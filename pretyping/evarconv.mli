@@ -92,7 +92,7 @@ val apply_hooks : hook
 
 (** Check if a canonical structure is applicable *)
 
-val check_conv_record : env -> evar_map ->
+val check_conv_record : env -> ?flags:unify_flags -> evar_map ->
   state -> state ->
   evar_map * (constr * constr)
   * constr * constr list * (EConstr.t list * EConstr.t list) *
@@ -150,7 +150,7 @@ val evar_unify : Evarsolve.unifier
 
 (**/**)
 (* For debugging *)
-val evar_eqappr_x : ?rhs_is_already_stuck:bool -> unify_flags ->
+val evar_eqappr_x : ?rhs_is_already_stuck:bool -> int -> unify_flags ->
   env -> evar_map ->
     conv_pb -> state -> state ->
       Evarsolve.unification_result
