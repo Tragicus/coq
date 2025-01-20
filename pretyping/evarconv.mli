@@ -155,8 +155,12 @@ val evar_unify : Evarsolve.unifier
 (**/**)
 (* For debugging *)
 module Cs_keys_cache : sig type t end
+module EMap : sig type 'a t end
+module Unif_cache : sig type t end
 
-val evar_eqappr_x : ?rhs_is_already_stuck:bool -> unify_flags ->
+val evar_eqappr_x : ?rhs_is_already_stuck:bool ->
+  Unif_cache.t ->
+  unify_flags ->
   env -> evar_map -> conv_pb ->
   Cs_keys_cache.t ->
   bool option -> state -> state ->
