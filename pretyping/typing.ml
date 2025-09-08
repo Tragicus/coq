@@ -26,8 +26,6 @@ open Context.Rel.Declaration
 
 module GR = Names.GlobRef
 
-let debug_typing = CDebug.create ~name:"typing" ()
-
 let fresh_template_context env0 sigma ind (mib, _ as spec) ?(refresh_all=false) args =
   let template = Option.get mib.Declarations.mind_template in
   let templ = Array.of_list template.template_param_arguments in
@@ -536,7 +534,6 @@ let check_binder_relevance env sigma s decl =
 (* cstr must be in n.f. w.r.t. evars and execute returns a judgement
    where both the term and type are in n.f. *)
 let rec execute env sigma cstr =
-  let () = debug_typing (fun () -> Pp.(v 0 (str "cstr: " ++ Termops.Internal.print_constr_env env sigma cstr ++ cut ()))) in
   let cstr = whd_evar sigma cstr in
   match EConstr.kind sigma cstr with
     | Meta n -> assert false (* Typing should always be performed on meta-free terms *)
