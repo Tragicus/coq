@@ -882,6 +882,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
   let rec get_cs flags env sigma p1 appr1 appr2 =
     let cs sigma =
       try
+        let () = match get_proj_case appr2 with Proj.Reducible _ -> raise Not_found | _ -> () in
         let s = check_conv_record env sigma p1 appr2 in
         conv_record flags env s
       with Not_found -> UnifFailure (sigma, NoCanonicalStructure) in
