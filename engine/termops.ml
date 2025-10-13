@@ -25,7 +25,7 @@ module NamedDecl = Context.Named.Declaration
 
 module Internal = struct
 
-  let debug_print_constr sigma c = Constr.debug_print (EConstr.to_constr sigma c)
+  let debug_print_constr sigma c = Constr.debug_print (EConstr.to_constr ~abort_on_undefined_evars:false sigma c)
   let fallback_printer _env sigma c = debug_print_constr sigma c
   let term_printer = ref fallback_printer
 
