@@ -625,33 +625,33 @@ type pretyper = {
   pretype_type : pretyper -> glob_constr -> unsafe_type_judgment pretype_fun;
 }
 
-let pp_dast t = str (match t with
-  | GRef (_, _) -> "GRef"
-  | GVar _ -> "GVar"
-  | GEvar (_, _) -> "GEvar"
-  | GPatVar _ -> "GPatVar"
-  | GApp (_, _) -> "GApp"
-  | GProj (_, _, _) -> "GProj"
-  | GLambda (_, _, _, _, _) -> "GLambda"
-  | GProd (_, _, _, _, _) -> "GProd"
-  | GLetIn (_, _, _, _, _) -> "GLetIn"
-  | GCases (_, _, _, _) -> "GCases"
-  | GLetTuple (_, _, _, _) -> "GLetTuple"
-  | GIf (_, _, _, _) -> "GIf"
-  | GRec (_, _, _, _, _) -> "GRec"
-  | GSort _ -> "GSort"
-  | GHole _ -> "GHole"
-  | GGenarg _ -> "GGenarg"
-  | GCast (_, _, _) -> "GCast"
-  | GInt _ -> "GInt"
-  | GFloat _ -> "GFloat"
-  | GString _ -> "GString"
-  | GArray (_, _, _, _) -> "GArray")
+let pp_dast = function
+  | GRef (x, _) -> str "GRef" ++ Names.GlobRef.print x
+  | GVar i -> str "GVar" ++ Names.Id.print i
+  | GEvar (_, _) -> str "GEvar"
+  | GPatVar _ -> str "GPatVar"
+  | GApp (_, _) -> str "GApp"
+  | GProj ((p, _), _, _) -> str "GProj" ++ Names.Constant.print p
+  | GLambda (_, _, _, _, _) -> str "GLambda"
+  | GProd (_, _, _, _, _) -> str "GProd"
+  | GLetIn (_, _, _, _, _) -> str "GLetIn"
+  | GCases (_, _, _, _) -> str "GCases"
+  | GLetTuple (_, _, _, _) -> str "GLetTuple"
+  | GIf (_, _, _, _) -> str "GIf"
+  | GRec (_, _, _, _, _) -> str "GRec"
+  | GSort _ -> str "GSort"
+  | GHole _ -> str "GHole"
+  | GGenarg _ -> str "GGenarg"
+  | GCast (_, _, _) -> str "GCast"
+  | GInt _ -> str "GInt"
+  | GFloat _ -> str "GFloat"
+  | GString _ -> str "GString"
+  | GArray (_, _, _, _) -> str "GArray"
 
 (** Tie the loop *)
 let eval_pretyper self ~flags tycon env sigma t =
   let loc = t.CAst.loc in
-  let () = debug_pretyping (fun () -> Pp.(str "eval_pretyper" ++ pp_dast (DAst.get t))) in
+  let () = debug_pretyping (fun () -> Pp.(pp_dast (DAst.get t))) in
   match DAst.get t with
   | GRef (ref,u) ->
     self.pretype_ref self (ref, u) ?loc ~flags tycon env sigma
