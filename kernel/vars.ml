@@ -147,7 +147,8 @@ let substn_many lamv n c =
           else if k-depth <= lv then lift_substituend depth (Array.unsafe_get lamv (k-depth-1))
           else Constr.mkRel (k-lv)
       | _ -> Constr.map_with_binders succ substrec depth c in
-    let () = debug_vars (fun () -> Pp.(str "substrec" ++ int n ++ str " " ++ Constr.debug_print c)) in
+    let () = debug_vars (fun () -> Pp.(str "substrec " ++ int n)) in
+    let () = debug_vars (fun () -> Pp.(Constr.debug_print c)) in
     substrec n c
 
 let make_subst = function
