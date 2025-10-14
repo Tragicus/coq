@@ -30,6 +30,8 @@ open Names
 open UVars
 open Context
 
+let debug_constr = CDebug.create ~name:"constr" ()
+
 type existential_key = Evar.t
 type metavariable = int
 
@@ -1402,8 +1404,35 @@ let pr_puniverses p u =
   if UVars.Instance.is_empty u then p
   else Pp.(p ++ str"(*" ++ UVars.Instance.pr Sorts.raw_printer u ++ str"*)")
 
+let dbg_print c =
+  let open Pp in
+  match kind c with
+  | Rel _ -> str "Rel"
+  | Meta _ -> str "Meta"
+  | Var _ -> str "Var"
+  | Sort _ -> str "Sort"
+  | Cast _ -> str "Cast"
+  | Prod _ -> str "Prod"
+  | Lambda _ -> str "Lambda"
+  | LetIn _ -> str "LetIn"
+  | App _ -> str "App"
+  | Evar _ -> str "Evar"
+  | Const _ -> str "Const"
+  | Ind _ -> str "Ind"
+  | Construct _ -> str "Construct"
+  | Proj _ -> str "Proj"
+  | Case _ -> str "Case"
+  | Fix _ -> str "Fix"
+  | CoFix _ -> str "CoFix"
+  | Int _ -> str "Int"
+  | Float _ -> str "Float"
+  | String _ -> str "String"
+  | Array _ -> str "Array"
+
+
 let rec debug_print c =
   let open Pp in
+  let () = debug_constr (fun () -> dbg_print c) in
   match kind c with
   | Rel n -> str "#"++int n
   | Meta n -> str "Meta(" ++ int n ++ str ")"
