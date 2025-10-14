@@ -1311,6 +1311,7 @@ struct
       discard_trace @@ inh_conv_coerce_to_tycon ?loc ~flags env sigma resj tycon
 
   let pretype_letin self (name, c1, t, c2) =
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin")) in
     fun ?loc ~flags tycon env sigma ->
     let open Context.Rel.Declaration in
     let pretype tycon env sigma c = eval_pretyper self ~flags tycon env sigma c in
@@ -1322,17 +1323,32 @@ struct
         sigma, mk_tycon t_j.utj_val
       | None ->
         sigma, empty_tycon in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin t")) in
     let sigma, j = pretype tycon1 env sigma c1 in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin c1")) in
     let sigma, t = Evarsolve.refresh_universes
       ~onlyalg:true ~status:Evd.univ_flexible (Some false) !!env sigma j.uj_type in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin refreshed universes")) in
     let r = Retyping.relevance_of_term !!env sigma j.uj_val in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin r")) in
     let var = LocalDef (make_annot name r, j.uj_val, t) in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin var")) in
     let tycon = lift_tycon 1 tycon in
-    let var, env = push_rel sigma var env in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin tycon")) in
+    let hypnaming = VarSet.variables (Global.env ()) in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin hypnaming")) in
+    let var, env = push_rel ~hypnaming sigma var env in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin push_rel")) in
     let sigma, j' = pretype tycon env sigma c2 in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin c2")) in
     let name = get_name var in
-    sigma, { uj_val = mkLetIn (make_annot name r, j.uj_val, t, j'.uj_val) ;
-             uj_type = subst1 j.uj_val j'.uj_type }
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin name")) in
+    let l = mkLetIn (make_annot name r, j.uj_val, t, j'.uj_val) in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin l")) in
+    let ty = subst1 j.uj_val j'.uj_type in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin ty")) in
+    sigma, { uj_val = l ;
+             uj_type = ty }
 
   let pretype_lettuple self (nal, (na, po), c, d) =
     fun ?loc ~flags tycon env sigma ->
