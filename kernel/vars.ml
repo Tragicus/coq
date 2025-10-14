@@ -175,6 +175,7 @@ let substnl laml n c = substn_many (make_subst laml) n c
 let substl laml c = substn_many (make_subst laml) 0 c
 let subst1 lam c =
   let () = debug_vars (fun () -> Pp.(str "subst1")) in
+  let () = debug_vars (fun () -> Pp.(Constr.debug_print c)) in
   let s = make_substituend lam in
   let () = debug_vars (fun () -> Pp.(str "subst1 s")) in
   substn_many [|s|] 0 c
