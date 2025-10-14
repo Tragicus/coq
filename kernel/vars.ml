@@ -164,7 +164,9 @@ type substl = Constr.t list
 
 let substnl laml n c = substn_many (make_subst laml) n c
 let substl laml c = substn_many (make_subst laml) 0 c
-let subst1 lam c = substn_many [|make_substituend lam|] 0 c
+let subst1 lam c =
+  let s = make_substituend lam in
+  substn_many [|s|] 0 c
 
 let substnl_decl laml k r = RelDecl.map_constr (fun c -> substnl laml k c) r
 let substl_decl laml r = RelDecl.map_constr (fun c -> substnl laml 0 c) r
