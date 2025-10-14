@@ -12,6 +12,8 @@ open Names
 
 module RelDecl = Context.Rel.Declaration
 
+let debug_vars = CDebug.create ~name:"vars" ()
+
 (*********************)
 (*     Occurring     *)
 (*********************)
@@ -134,7 +136,9 @@ let substn_many lamv n c =
   let lv = Array.length lamv in
   if Int.equal lv 0 then c
   else
-    let rec substrec depth c = match Constr.kind c with
+    let rec substrec depth c =
+      let () = debug_vars (fun () -> Pp.(Constr.debug_print c)) in
+      match Constr.kind c with
       | Constr.Rel k     ->
           if k<=depth then c
           else if k-depth <= lv then lift_substituend depth (Array.unsafe_get lamv (k-depth-1))

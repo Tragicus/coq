@@ -1018,8 +1018,8 @@ let subst1 c r =
   let r = to_constr r in
   let c = to_constr c in
   let () = debug_econstr (fun () -> Pp.(str "subst1")) in
-  let () = debug_econstr (fun () -> Pp.(str "finish subst1")) in
   let x = Vars.subst1 c r in
+  let () = debug_econstr (fun () -> Pp.(str "finish subst1")) in
   of_constr x
 
 
