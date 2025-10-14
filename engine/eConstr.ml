@@ -18,6 +18,9 @@ open Context
 
 module NamedDecl = Context.Named.Declaration
 
+
+let debug_econstr = CDebug.create ~name:"econstr" ()
+
 module ERelevance = struct
   include Evd.MiniEConstr.ERelevance
 
@@ -1011,7 +1014,13 @@ let liftn n m c = of_constr (Vars.liftn n m (to_constr c))
 
 let substnl subst n c = of_constr (Vars.substnl (cast_list unsafe_eq subst) n (to_constr c))
 let substl subst c = of_constr (Vars.substl (cast_list unsafe_eq subst) (to_constr c))
-let subst1 c r = of_constr (Vars.subst1 (to_constr c) (to_constr r))
+let subst1 c r =
+  let r = to_constr r in
+  let c = to_constr c in
+  let () = debug_econstr (fun () -> Pp.(str "subst1")) in
+  let x = Vars.subst1 c r in
+  of_constr x
+
 
 let substnl_decl subst n d = of_rel_decl (Vars.substnl_decl (cast_list unsafe_eq subst) n (to_rel_decl d))
 let substl_decl subst d = of_rel_decl (Vars.substl_decl (cast_list unsafe_eq subst) (to_rel_decl d))
