@@ -169,7 +169,9 @@ type substl = Constr.t list
 let substnl laml n c = substn_many (make_subst laml) n c
 let substl laml c = substn_many (make_subst laml) 0 c
 let subst1 lam c =
+  let () = debug_vars (fun () -> Pp.(str "subst1")) in
   let s = make_substituend lam in
+  let () = debug_vars (fun () -> Pp.(str "subst1 s")) in
   substn_many [|s|] 0 c
 
 let substnl_decl laml k r = RelDecl.map_constr (fun c -> substnl laml k c) r
