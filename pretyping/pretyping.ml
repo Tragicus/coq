@@ -1345,6 +1345,7 @@ struct
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin name")) in
     let l = mkLetIn (make_annot name r, j.uj_val, t, j'.uj_val) in
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin l")) in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin subst1 " ++ Termops.Internal.print_constr_env env sigma j.uj_val ++ cut () ++ Termops.Internal.print_constr_env env sigma j'.uj_type)) in
     let ty = subst1 j.uj_val j'.uj_type in
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin ty")) in
     sigma, { uj_val = l ;
