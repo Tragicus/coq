@@ -1782,7 +1782,10 @@ let understand
   ise_pretype_gen_ctx flags env sigma empty_lvar expected_type c
 
 let understand_tcc_ty ?(flags=all_no_fail_flags) env sigma ?(expected_type=WithoutTypeConstraint) c =
-  ise_pretype_gen flags env sigma empty_lvar expected_type c
+  let () = debug_pretyping (fun () -> Pp.(str "understand_tcc_ty")) in
+  let r = ise_pretype_gen flags env sigma empty_lvar expected_type c in
+  let () = debug_pretyping (fun () -> Pp.(str "leave understand_tcc_ty")) in
+  r
 
 let understand_tcc ?flags env sigma ?expected_type c =
   let sigma, c, _ = understand_tcc_ty ?flags env sigma ?expected_type c in
