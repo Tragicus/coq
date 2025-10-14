@@ -626,12 +626,12 @@ type pretyper = {
 }
 
 let pp_dast = function
-  | GRef (x, _) -> str "GRef" ++ Names.GlobRef.print x
-  | GVar i -> str "GVar" ++ Names.Id.print i
+  | GRef (x, _) -> str "GRef " ++ Names.GlobRef.print x
+  | GVar i -> str "GVar " ++ Names.Id.print i
   | GEvar (_, _) -> str "GEvar"
   | GPatVar _ -> str "GPatVar"
   | GApp (_, _) -> str "GApp"
-  | GProj ((p, _), _, _) -> str "GProj" ++ Names.Constant.print p
+  | GProj ((p, _), _, _) -> str "GProj " ++ Names.Constant.print p
   | GLambda (_, _, _, _, _) -> str "GLambda"
   | GProd (_, _, _, _, _) -> str "GProd"
   | GLetIn (_, _, _, _, _) -> str "GLetIn"
@@ -652,7 +652,7 @@ let pp_dast = function
 let eval_pretyper self ~flags tycon env sigma t =
   let loc = t.CAst.loc in
   let () = debug_pretyping (fun () -> Pp.(pp_dast (DAst.get t))) in
-  match DAst.get t with
+  let r = match DAst.get t with
   | GRef (ref,u) ->
     self.pretype_ref self (ref, u) ?loc ~flags tycon env sigma
   | GVar id ->
@@ -694,7 +694,9 @@ let eval_pretyper self ~flags tycon env sigma t =
   | GString s ->
     self.pretype_string self s ?loc ~flags tycon env sigma
   | GArray (u,t,def,ty) ->
-    self.pretype_array self (u,t,def,ty) ?loc ~flags tycon env sigma
+    self.pretype_array self (u,t,def,ty) ?loc ~flags tycon env sigma in
+  let () = debug_pretyping (fun () -> str "leaving eval_pretyper " ++ pp_dast (DAst.get t)) in
+  r
 
 let eval_type_pretyper self ~flags tycon env sigma t =
   self.pretype_type self t ~flags tycon env sigma
