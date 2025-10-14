@@ -133,8 +133,12 @@ let lift_substituend depth s = if Int.equal depth 0 then s.sit else lift_substit
 let make_substituend c = { sinfo=Unknown; sit=c }
 
 let substn_many lamv n c =
+  let () = debug_vars (fun () -> Pp.(str "substn_many")) in
   let lv = Array.length lamv in
-  if Int.equal lv 0 then c
+  let () = debug_vars (fun () -> Pp.(str "substn_many lv")) in
+  if Int.equal lv 0 then
+    let () = debug_vars (fun () -> Pp.(str "substn_many trivial")) in
+    c
   else
     let rec substrec depth c =
       match Constr.kind c with
