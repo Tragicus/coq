@@ -1416,7 +1416,7 @@ let dbg_print c =
   | Lambda _ -> str "Lambda"
   | LetIn _ -> str "LetIn"
   | App _ -> str "App"
-  | Evar _ -> str "Evar"
+  | Evar e -> str "Evar" ++ Evar.print (fst e)
   | Const _ -> str "Const"
   | Ind _ -> str "Ind"
   | Construct _ -> str "Construct"
