@@ -1417,7 +1417,7 @@ let dbg_print c =
   | LetIn _ -> str "LetIn"
   | App _ -> str "App"
   | Evar e -> str "Evar" ++ Evar.print (fst e)
-  | Const _ -> str "Const" ++ Constant.debug_print c
+  | Const (c, _) -> str "Const" ++ Constant.debug_print c
   | Ind _ -> str "Ind"
   | Construct _ -> str "Construct"
   | Proj _ -> str "Proj"
