@@ -1407,7 +1407,7 @@ let pr_puniverses p u =
 let dbg_print c =
   let open Pp in
   match kind c with
-  | Rel _ -> str "Rel"
+  | Rel n -> str "Rel" ++ int n
   | Meta _ -> str "Meta"
   | Var _ -> str "Var"
   | Sort _ -> str "Sort"
@@ -1417,7 +1417,7 @@ let dbg_print c =
   | LetIn _ -> str "LetIn"
   | App _ -> str "App"
   | Evar e -> str "Evar" ++ Evar.print (fst e)
-  | Const _ -> str "Const"
+  | Const _ -> str "Const" ++ Constant.debug_print c
   | Ind _ -> str "Ind"
   | Construct _ -> str "Construct"
   | Proj _ -> str "Proj"
