@@ -625,7 +625,7 @@ type pretyper = {
   pretype_type : pretyper -> glob_constr -> unsafe_type_judgment pretype_fun;
 }
 
-let pp_dast = function
+(*let pp_dast = function
   | GRef (x, _) -> str "GRef " ++ Names.GlobRef.print x
   | GVar i -> str "GVar " ++ Names.Id.print i
   | GEvar (_, _) -> str "GEvar"
@@ -646,7 +646,7 @@ let pp_dast = function
   | GInt _ -> str "GInt"
   | GFloat _ -> str "GFloat"
   | GString _ -> str "GString"
-  | GArray (_, _, _, _) -> str "GArray"
+  | GArray (_, _, _, _) -> str "GArray"*)
 
 (** Tie the loop *)
 let eval_pretyper self ~flags tycon env sigma t =
@@ -1333,6 +1333,7 @@ struct
     let l = mkLetIn (make_annot name r, j.uj_val, t, j'.uj_val) in
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin l " ++ Termops.pr_evar_map None (GlobEnv.env env) sigma)) in
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin subst1 " ++ Termops.Internal.print_constr_env (GlobEnv.env env) sigma j.uj_val ++ cut () ++ Termops.Internal.print_constr_env (GlobEnv.env env) sigma j'.uj_type)) in
+    let () = debug_pretyping (fun () -> Pp.(str "pretype_letin subst1 " ++ Constr.debug_print (EConstr.to_constr ~abort_on_undefined_evars:false sigma j'.uj_type))) in
     let ty = subst1 j.uj_val j'.uj_type in
     let () = debug_pretyping (fun () -> Pp.(str "pretype_letin ty")) in
     sigma, { uj_val = l ;

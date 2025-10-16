@@ -148,7 +148,7 @@ let substn_many lamv n c =
           else Constr.mkRel (k-lv)
       | _ -> Constr.map_with_binders succ substrec depth c in
     let () = debug_vars (fun () -> Pp.(str "substrec " ++ int n)) in
-    let () = debug_vars (fun () -> Pp.(Constr.debug_print c)) in
+    let () = debug_vars (fun () -> Constr.debug_print c) in
     substrec n c
 
 let make_subst = function
@@ -175,7 +175,7 @@ let substnl laml n c = substn_many (make_subst laml) n c
 let substl laml c = substn_many (make_subst laml) 0 c
 let subst1 lam c =
   let () = debug_vars (fun () -> Pp.(str "subst1")) in
-  let () = debug_vars (fun () -> Pp.(Constr.debug_print c)) in
+  let () = debug_vars (fun () -> Constr.debug_print c) in
   let s = make_substituend lam in
   let () = debug_vars (fun () -> Pp.(str "subst1 s")) in
   substn_many [|s|] 0 c
