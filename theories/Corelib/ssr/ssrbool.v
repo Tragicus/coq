@@ -495,6 +495,24 @@ Hint Resolve is_true_true not_false_is_true is_true_locked_true : core.
 Definition isT := is_true_true.
 Definition notF := not_false_is_true.
 
+(** Decidable propositions **)
+#[warning="-all"]
+Structure decProp := DecProp {
+  prop :> Prop;
+  propb :> bool;
+  propbP : reflect prop propb
+  }.
+
+#[global] Hint Resolve propbP : core.
+
+(**   Predicate family to reflect excluded middle in bool.  **)
+Variant alt_spec (P : decProp) : bool -> Type :=
+  | AltTrue of    P : alt_spec P true
+  | AltFalse of ~ P : alt_spec P false.
+
+Lemma altP (P : decProp) : alt_spec P P.
+Proof. by case def_b: (propb P) / (propbP P); constructor; rewrite ?def_b. Qed.
+
 (**  Negation lemmas.  **)
 
 (**
@@ -513,26 +531,28 @@ Lemma negb_inj : injective negb. Proof. exact: can_inj negbK. Qed.
 Lemma negbLR b c : b = ~~ c -> ~~ b = c. Proof. exact: canLR negbK. Qed.
 Lemma negbRL b c : ~~ b = c -> b = ~~ c. Proof. exact: canRL negbK. Qed.
 
-Lemma contra (c b : bool) : (c -> b) -> ~~ b -> ~~ c.
-Proof. by case: b => //; case: c. Qed.
+Lemma contra (P Q : Prop) : (Q -> P) -> ~ P -> ~ Q.
+Proof. by move=> QP PF /QP/PF. Qed.
 Definition contraNN := contra.
 
-Lemma contraL (c b : bool) : (c -> ~~ b) -> b -> ~~ c.
-Proof. by case: b => //; case: c. Qed.
+Lemma contraL (Q P : Prop) : (Q -> ~ P) -> P -> ~ Q.
+Proof. by move=> QP p /QP /(_ p). Qed.
 Definition contraTN := contraL.
 
-Lemma contraR (c b : bool) : (~~ c -> b) -> ~~ b -> c.
-Proof. by case: b => //; case: c. Qed.
+Lemma contraR (Q : decProp) (P : Prop) : (~ Q -> P) -> ~ P -> Q.
+Proof. by case: (altP Q) => // /[swap]/[apply]. Qed.
 Definition contraNT := contraR.
 
-Lemma contraLR (c b : bool) : (~~ c -> ~~ b) -> b -> c.
-Proof. by case: b => //; case: c. Qed.
+Lemma contraLR (Q : decProp) (P : Prop) : (~ Q -> ~ P) -> P -> Q.
+Proof. by case: (altP Q) => // /[swap]/[apply]. Qed.
 Definition contraTT := contraLR.
 
-Lemma contraT b : (~~ b -> false) -> b. Proof. by case: b => // ->. Qed.
+Lemma contraT (P : decProp) : ~ ~ P -> P. Proof. by case: (altP P). Qed.
 
-Lemma wlog_neg b : (~~ b -> b) -> b. Proof. by case: b => // ->. Qed.
+Lemma wlog_neg (P : decProp) : (~ P -> P) -> P.
+Proof. by case: (altP P) => // /[swap]/[apply]. Qed.
 
+(*
 Lemma contraFT (c b : bool) : (~~ c -> b) -> b = false -> c.
 Proof. by move/contraR=> notb_c /negbT. Qed.
 
@@ -547,38 +567,48 @@ Proof. by move/contra=> notb_notc /notb_notc/negbTE. Qed.
 
 Lemma contraFF (c b : bool) : (c -> b) -> b = false -> c = false.
 Proof. by move/contraFN=> bF_notc /bF_notc/negbTE. Qed.
+ *)
 
 (* additional contra lemmas involving [P,Q : Prop] *)
-Lemma contra_not (P Q : Prop) : (Q -> P) -> (~ P -> ~ Q). Proof. by auto. Qed.
+(* Lemma contra_not (P Q : Prop) : (Q -> P) -> (~ P -> ~ Q). Proof. by auto. Qed. *)
+Abbreviation contra_not := contra.
 
-Lemma contraPnot (P Q : Prop) : (Q -> ~ P) -> (P -> ~ Q). Proof. by auto. Qed.
+(* Lemma contraPnot (P Q : Prop) : (Q -> ~ P) -> (P -> ~ Q). Proof. by auto. Qed. *)
+Abbreviation contraPnot := contraL.
 
-Lemma contraTnot (b : bool) (P : Prop) : (P -> ~~ b) -> (b -> ~ P).
-Proof. by case: b; auto. Qed.
+(*Lemma contraTnot (b : bool) (P : Prop) : (P -> ~~ b) -> (b -> ~ P).
+   Proof. by case: b; auto. Qed.*)
+Abbreviation contraTnot := contraL.
 
-Lemma contraNnot (P : Prop) (b : bool) : (P -> b) -> (~~ b -> ~ P).
-Proof. rewrite -{1}[b]negbK; exact: contraTnot. Qed.
+(*Lemma contraNnot (P : Prop) (b : bool) : (P -> b) -> (~~ b -> ~ P).
+  Proof. rewrite -{1}[b]negbK; exact: contraTnot. Qed.*)
+Abbreviation contraNnot := contra.
 
-Lemma contraPT (P : Prop) (b : bool) : (~~ b -> ~ P) -> P -> b.
-Proof. by case: b => //= /(_ isT) nP /nP. Qed.
+(*Lemma contraPT (P : Prop) (b : bool) : (~~ b -> ~ P) -> P -> b.
+   Proof. by case: b => //= /(_ isT) nP /nP. Qed.*)
+Abbreviation contraPT := contraLR.
 
-Lemma contra_notT (P : Prop) (b : bool) : (~~ b -> P) -> ~ P -> b.
-Proof. by case: b => //= /(_ isT) HP /(_ HP). Qed.
+(*Lemma contra_notT (P : Prop) (b : bool) : (~~ b -> P) -> ~ P -> b.
+  Proof. by case: b => //= /(_ isT) HP /(_ HP). Qed.*)
+Abbreviation contra_notT := contraR.
 
-Lemma contra_notN (P : Prop) (b : bool) : (b -> P) -> ~ P -> ~~ b.
-Proof. rewrite -{1}[b]negbK; exact: contra_notT. Qed.
+(*Lemma contra_notN (P : Prop) (b : bool) : (b -> P) -> ~ P -> ~~ b.
+   Proof. rewrite -{1}[b]negbK; exact: contra_notT. Qed.*)
+Abbreviation contra_notN := contra.
 
-Lemma contraPN (P : Prop) (b : bool) : (b -> ~ P) -> (P -> ~~ b).
-Proof. by case: b => //=; move/(_ isT) => HP /HP. Qed.
+(*Lemma contraPN (P : Prop) (b : bool) : (b -> ~ P) -> (P -> ~~ b).
+  Proof. by case: b => //=; move/(_ isT) => HP /HP. Qed.*)
+Abbreviation contraPN := contraL.
 
-Lemma contraFnot (P : Prop) (b : bool) : (P -> b) -> b = false -> ~ P.
-Proof. by case: b => //; auto. Qed.
+(*Lemma contraFnot (P : Prop) (b : bool) : (P -> b) -> b = false -> ~ P.
+   Proof. by case: b => //; auto. Qed.
 
 Lemma contraPF (P : Prop) (b : bool) : (b -> ~ P) -> P -> b = false.
 Proof. by case: b => // /(_ isT). Qed.
 
 Lemma contra_notF (P : Prop) (b : bool) : (b -> P) -> ~ P -> b = false.
 Proof. by case: b => // /(_ isT). Qed.
+ *)
 
 (**
  Coercion of sum-style datatypes into bool, which makes it possible
@@ -649,6 +679,27 @@ End BoolIf.
 
 Section ReflectCore.
 
+(*Variables (P : decProp) (Q : Prop) (b : bool).
+
+Lemma introNTF : (if b then ~ P else P) -> ~~ P = b.
+Proof. by case b; case (propbP P). Qed.
+
+Lemma introTF : (if b then P : Prop else ~ P) -> P = b :> bool.
+Proof. by case b; case (propbP P). Qed.
+
+Lemma elimNTF : ~~ P = b -> if b then ~ P else P.
+Proof. by move <-; case (propbP P). Qed.
+
+Lemma elimTF : P = b :> bool -> if b then P : Prop else ~ P.
+Proof. by move <-; case (propbP P). Qed.
+
+Lemma equivPif : (Q -> P) -> (P -> Q) -> if P then Q else ~ Q.
+Proof. by case (propbP P); auto. Qed.
+
+Lemma xorPif : Q \/ P -> ~ (Q /\ P) -> if P then ~ Q else Q.
+Proof. by case (propbP P) => [? _ H ? | ? H _]; case: H. Qed.
+*)
+
 Variables (P Q : Prop) (b c : bool).
 
 Hypothesis Hb : reflect P b.
@@ -676,6 +727,20 @@ End ReflectCore.
 (**  Internal negated reflection lemmas  **)
 Section ReflectNegCore.
 
+(*Variables (P : decProp) (Q : Prop) (b : bool).
+
+Lemma introTFn : (if ~~ b then ~ P else P) -> P = b :> bool.
+Proof. by move/introNTF/negb_inj. Qed.
+
+Lemma elimTFn : ~~ P = b :> bool -> if b then ~ P else P.
+Proof. by move <-; apply: elimNTF. Qed.
+
+Lemma equivPifn : (Q -> P) -> (P -> Q) -> if ~~ P then ~ Q else Q.
+Proof. by rewrite if_neg; apply: equivPif. Qed.
+
+Lemma xorPifn : Q \/ P -> ~ (Q /\ P) -> if ~~ P then Q else ~ Q.
+Proof. by rewrite if_neg; apply: xorPif. Qed.*)
+
 Variables (P Q : Prop) (b c : bool).
 Hypothesis Hb : reflect P (~~ b).
 
@@ -695,6 +760,17 @@ End ReflectNegCore.
 
 (**  User-oriented reflection lemmas  **)
 Section Reflect.
+
+(*Variables (P : decProp) (Q : Prop) (b : bool).
+Hypotheses (Pb : reflect P b) (Pb' : reflect P (~~ b')).
+
+Lemma introT  : P -> propb P.            Proof. exact: introTF true _. Qed.
+Lemma introF  : ~ (propb P) -> (propb P) = false.  Proof. exact: introTF false _. Qed.
+Lemma introN  : ~ P -> ~~ P.       Proof. exact: introNTF true _. Qed.
+Lemma introNf : P -> ~~ P = false. Proof. exact: introNTF false _. Qed.
+Lemma introTn : ~ P -> ~~ P.         Proof. exact: introTFn true _. Qed.
+Lemma introFn : P -> ~~ P = false.   Proof. exact: introTFn false _. Qed.
+*)
 
 Variables (P Q : Prop) (b b' c : bool).
 Hypotheses (Pb : reflect P b) (Pb' : reflect P (~~ b')).
@@ -740,14 +816,6 @@ Lemma rwP : P <-> b. Proof. by split; [apply: introT | apply: elimT]. Qed.
 Lemma rwP2 : reflect Q b -> (P <-> Q).
 Proof. by move=> Qb; split=> ?; [apply: appP | apply: elimT; case: Qb]. Qed.
 
-(**   Predicate family to reflect excluded middle in bool.  **)
-Variant alt_spec : bool -> Type :=
-  | AltTrue of     P : alt_spec true
-  | AltFalse of ~~ b : alt_spec false.
-
-Lemma altP : alt_spec b.
-Proof. by case def_b: b / Pb; constructor; rewrite ?def_b. Qed.
-
 Lemma eqbLR (b1 b2 : bool) : b1 = b2 -> b1 -> b2.
 Proof. by move->. Qed.
 
@@ -764,6 +832,7 @@ Hint View for apply// equivPif|3 xorPif|3 equivPifn|3 xorPifn|3.
 
 (**  Allow the direct application of a reflection lemma to a boolean assertion.  **)
 Coercion elimT : reflect >-> Funclass.
+
 
 #[universes(template)]
 Variant implies P Q := Implies of P -> Q.
@@ -918,9 +987,6 @@ Variable b1 b2 b3 b4 b5 : bool.
 Lemma idP : reflect b1 b1.
 Proof. by case b1; constructor. Qed.
 
-Lemma boolP : alt_spec b1 b1 b1.
-Proof. exact: (altP idP). Qed.
-
 (* Left-to-right reflection of ~~b1 to (b1 = false), no-op otherwise. *)
 Lemma idPn : reflect (~~ b1) (~~ b1).
 Proof. by case b1; constructor. Qed.
@@ -1026,6 +1092,19 @@ Arguments andPP {P Q p q}.
 Arguments orPP {P Q p q}.
 Arguments implyPP {P Q p q}.
 Prenex Implicits negPP andPP orPP implyPP.
+
+Canonical decPropT := DecProp (Datatypes.ReflectT True I).
+Canonical decPropF := DecProp (Datatypes.ReflectF False idfun).
+Canonical decProp_bool b := DecProp (@idP b).
+Canonical decProp_neg (P : decProp) := DecProp (negPP (propbP P)).
+Canonical decProp_and (P Q : decProp) := DecProp (andPP (propbP P) (propbP Q)).
+Canonical decProp_or (P Q : decProp) := DecProp (orPP (propbP P) (propbP Q)).
+Canonical decProp_imply (P Q : decProp) := DecProp (implyPP (propbP P) (propbP Q)).
+
+
+Lemma boolP b : alt_spec b b.
+Proof. exact: (altP b). Qed.
+
 
 (**  Shorter, more systematic names for the boolean connectives laws.        **)
 
@@ -1249,19 +1328,22 @@ Ltac bool_congr :=
 
 (** Boolean predicates. *)
 
-Definition pred T := T -> bool.
+Definition pred T := T -> Prop.
 Identity Coercion fun_of_pred : pred >-> Funclass.
 
 Definition subpred T (p1 p2 : pred T) := forall x : T, p1 x -> p2 x.
 
+Definition dec_pred T := T -> decProp.
+Coercion pred_of_dec_pred T : dec_pred T -> pred T := fun P x => P x.
+
 (* Abbreviation for some manifest predicates. *)
 
-Abbreviation xpred0 := (fun=> false).
-Abbreviation xpredT := (fun=> true).
-Abbreviation xpredI := (fun (p1 p2 : pred _) x => p1 x && p2 x).
-Abbreviation xpredU := (fun (p1 p2 : pred _) x => p1 x || p2 x).
-Abbreviation xpredC := (fun (p : pred _) x => ~~ p x).
-Abbreviation xpredD := (fun (p1 p2 : pred _) x => ~~ p2 x && p1 x).
+Abbreviation xpred0 := (fun=> False).
+Abbreviation xpredT := (fun=> True).
+Abbreviation xpredI := (fun (p1 p2 : pred _) x => p1 x /\ p2 x).
+Abbreviation xpredU := (fun (p1 p2 : pred _) x => p1 x \/ p2 x).
+Abbreviation xpredC := (fun (p : pred _) x => ~ p x).
+Abbreviation xpredD := (fun (p1 p2 : pred _) x => ~ p2 x /\ p1 x).
 Abbreviation xpreim := (fun f (p : pred _) x => p (f x)).
 
 (** The packed class interface for pred-like types. **)
@@ -1276,8 +1358,18 @@ Notation "[ 'predType' 'of' T ]" := (@clone_pred _ T _ id _ id) : form_scope.
 
 Canonical predPredType T := PredType (@id (pred T)).
 Set Warnings "-redundant-canonical-projection".
-Canonical boolfunPredType T := PredType (@id (T -> bool)).
+Canonical propfunPredType T := PredType (@id (T -> Prop)).
 Set Warnings "redundant-canonical-projection".
+
+Structure decPredType T :=
+   DecPredType {dec_pred_sort :> Type; dec_topred : dec_pred_sort -> dec_pred T}.
+
+Coercion dec_toPredType T : decPredType T -> predType T :=
+  fun S => PredType (@dec_topred T S).
+
+Canonical dec_predDecPredType T := DecPredType (@id (dec_pred T)).
+#[warning="-redundant-canonical-projection"]
+Canonical decPropfunDecPredType T := DecPredType (@id (T -> decProp)).
 
 (** The type of abstract collective predicates.
  While {pred T} is convertible to pred T, it presents the pred_sort coercion
@@ -1304,7 +1396,7 @@ Set Warnings "redundant-canonical-projection".
 Notation "{ 'pred' T }" := (pred_sort (predPredType T)) : type_scope.
 
 (** The type of self-simplifying collective predicates. **)
-Definition simpl_pred T := simpl_fun T bool.
+Definition simpl_pred T := simpl_fun T Prop.
 Definition SimplPred {T} (p : pred T) : simpl_pred T := SimplFun p.
 
 (** Some simpl_pred constructors. **)
@@ -1320,11 +1412,11 @@ Definition preim {aT rT} (f : aT -> rT) (d : pred rT) := SimplPred (xpreim f d).
 Notation "[ 'pred' : T | E ]" := (SimplPred (fun _ : T => E%B)) :
   function_scope.
 Notation "[ 'pred' x | E ]" := (SimplPred (fun x => E%B)) : function_scope.
-Notation "[ 'pred' x | E1 & E2 ]" := [pred x | E1 && E2 ] : function_scope.
+Notation "[ 'pred' x | E1 & E2 ]" := [pred x | E1 /\ E2 ] : function_scope.
 Notation "[ 'pred' x : T | E ]" :=
   (SimplPred (fun x : T => E%B)) (only parsing) : function_scope.
 Notation "[ 'pred' x : T | E1 & E2 ]" :=
-  [pred x : T | E1 && E2 ] (only parsing) : function_scope.
+  [pred x : T | E1 /\ E2 ] (only parsing) : function_scope.
 
 (** Coercions for simpl_pred.
    As simpl_pred T values are used both applicatively and collectively we
@@ -1383,12 +1475,15 @@ Identity Coercion fun_of_rel : rel >-> Funclass.
 
 Definition subrel T (r1 r2 : rel T) := forall x y : T, r1 x y -> r2 x y.
 
+Definition dec_rel T := T -> dec_pred T.
+Coercion rel_of_dec_rel T : dec_rel T -> rel T := fun R x => R x.
+
 Definition simpl_rel T := T -> simpl_pred T.
 
 Coercion rel_of_simpl T (sr : simpl_rel T) : rel T := fun x : T => sr x.
 Arguments rel_of_simpl {T} sr x /.
 
-Abbreviation xrelU := (fun (r1 r2 : rel _) x y => r1 x y || r2 x y).
+Abbreviation xrelU := (fun (r1 r2 : rel _) x y => r1 x y \/ r2 x y).
 Abbreviation xrelpre := (fun f (r : rel _) x y => r (f x) (f y)).
 
 Definition SimplRel {T} (r : rel T) : simpl_rel T := fun x => SimplPred (r x).
@@ -1401,10 +1496,10 @@ Notation "[ 'rel' x y : T | E ]" :=
   (SimplRel (fun x y : T => E%B)) (only parsing) : function_scope.
 
 Lemma subrelUl T (r1 r2 : rel T) : subrel r1 (relU r1 r2).
-Proof. by move=> x y r1xy; apply/orP; left. Qed.
+Proof. by move=> x y r1xy; left. Qed.
 
 Lemma subrelUr T (r1 r2 : rel T) : subrel r2 (relU r1 r2).
-Proof. by move=> x y r2xy; apply/orP; right. Qed.
+Proof. by move=> x y r2xy; right. Qed.
 
 (** Variant of simpl_pred specialised to the membership operator. **)
 
@@ -1455,7 +1550,7 @@ Arguments mem {T pT} A : rename, simpl never.
 
 Notation "x \in A" := (in_mem x (mem A)) (only parsing) : bool_scope.
 Notation "x \in A" := (in_mem x (mem A)) (only printing) : bool_scope.
-Notation "x \notin A" := (~~ (x \in A)) : bool_scope.
+Notation "x \notin A" := (~ (x \in A)) : bool_scope.
 Notation "A =i B" := (eq_mem (mem A) (mem B)) : type_scope.
 Notation "{ 'subset' A <= B }" := (sub_mem (mem A) (mem B)) : type_scope.
 
@@ -1474,12 +1569,12 @@ Notation "[ 'preim' f 'of' A ]" := (preim f [in A]) : function_scope.
 Notation "[ 'pred' x 'in' A ]" := [pred x | x \in A] : function_scope.
 Notation "[ 'pred' x 'in' A | E ]" := [pred x | x \in A & E] : function_scope.
 Notation "[ 'pred' x 'in' A | E1 & E2 ]" :=
-  [pred x | x \in A & E1 && E2 ] : function_scope.
+  [pred x | x \in A & E1 /\ E2 ] : function_scope.
 
 Notation "[ 'rel' x y 'in' A & B | E ]" :=
-  [rel x y | (x \in A) && (y \in B) && E] : function_scope.
+  [rel x y | (x \in A) /\ (y \in B) && E] : function_scope.
 Notation "[ 'rel' x y 'in' A & B ]" :=
-  [rel x y | (x \in A) && (y \in B)] : function_scope.
+  [rel x y | (x \in A) /\ (y \in B)] : function_scope.
 Notation "[ 'rel' x y 'in' A | E ]" := [rel x y in A & A | E] : function_scope.
 Notation "[ 'rel' x y 'in' A ]" := [rel x y in A & A] : function_scope.
 
@@ -1715,30 +1810,32 @@ End DefaultKeying.
 
 (**  Skolemizing with conditions.  **)
 
-Lemma all_tag_cond_dep I T (C : pred I) U :
+Lemma all_tag_cond_dep I T (C : dec_pred I) U :
     (forall x, T x) -> (forall x, C x -> {y : T x & U x y}) ->
   {f : forall x, T x & forall x, C x -> U x (f x)}.
 Proof.
 move=> f0 fP; apply: all_tag (fun x y => C x -> U x y) _ => x.
-by case Cx: (C x); [case/fP: Cx => y; exists y | exists (f0 x)].
+case Cx: (C x : bool).
+  by case/propbP/fP: Cx => y; exists y.
+by exists (f0 x) => /propbP; rewrite Cx.
 Qed.
 
-Lemma all_tag_cond I T (C : pred I) U :
+Lemma all_tag_cond I T (C : dec_pred I) U :
     T -> (forall x, C x -> {y : T & U x y}) ->
   {f : I -> T & forall x, C x -> U x (f x)}.
 Proof. by move=> y0; apply: all_tag_cond_dep. Qed.
 
-Lemma all_sig_cond_dep I T (C : pred I) P :
+Lemma all_sig_cond_dep I T (C : dec_pred I) P :
     (forall x, T x) -> (forall x, C x -> {y : T x | P x y}) ->
   {f : forall x, T x | forall x, C x -> P x (f x)}.
 Proof. by move=> f0 /(all_tag_cond_dep f0)[f]; exists f. Qed.
 
-Lemma all_sig_cond I T (C : pred I) P :
+Lemma all_sig_cond I T (C : dec_pred I) P :
     T -> (forall x, C x -> {y : T | P x y}) ->
   {f : I -> T | forall x, C x -> P x (f x)}.
 Proof. by move=> y0; apply: all_sig_cond_dep. Qed.
 
-Lemma all_sig2_cond {I T} (C : pred I) P Q :
+Lemma all_sig2_cond {I T} (C : dec_pred I) P Q :
   T -> (forall x, C x -> {y : T | P x y & Q x y}) ->
   {f : I -> T | forall x, C x -> P x (f x) & forall x, C x -> Q x (f x)}.
 Proof.
@@ -1755,31 +1852,35 @@ Variable T : Type.
 
 Variable R : rel T.
 
-Definition total := forall x y, R x y || R y x.
+Definition total := forall x y, R x y \/ R y x.
 Definition transitive := forall y x z, R x y -> R y z -> R x z.
 
-Definition symmetric := forall x y, R x y = R y x.
-Definition antisymmetric := forall x y, R x y && R y x -> x = y.
+Definition symmetric := forall x y, R x y <-> R y x.
+Definition antisymmetric := forall x y, R x y /\ R y x -> x = y.
 Definition pre_symmetric := forall x y, R x y -> R y x.
 
 Lemma symmetric_from_pre : pre_symmetric -> symmetric.
-Proof. by move=> symR x y; apply/idP/idP; apply: symR. Qed.
+Proof. by move=> symR x y; split; apply: symR. Qed.
 
 Definition reflexive := forall x, R x x.
-Definition irreflexive := forall x, R x x = false.
+Definition irreflexive := forall x, ~ R x x.
 
-Definition left_transitive := forall x y, R x y -> R x =1 R y.
-Definition right_transitive := forall x y, R x y -> R^~ x =1 R^~ y.
+Definition left_transitive := forall x y, R x y -> forall z, (R x z <-> R y z).
+Definition right_transitive := forall x y, R x y -> forall z, (R^~ x z <-> R^~ y z).
 
 Section PER.
 
 Hypotheses (symR : symmetric) (trR : transitive).
 
 Lemma sym_left_transitive : left_transitive.
-Proof. by move=> x y Rxy z; apply/idP/idP; apply: trR; rewrite // symR. Qed.
+Proof. by move=> x y Rxy z; split; apply: trR => //; apply/symR. Qed.
 
 Lemma sym_right_transitive : right_transitive.
-Proof. by move=> x y /sym_left_transitive Rxy z; rewrite !(symR z) Rxy. Qed.
+Proof.
+(* TODO: Why does `move/sym_left_transitive` do so complicated things? *)
+move=> x y Rxy; move: (sym_left_transitive Rxy) => {}Rxy.
+by split=> /symR/Rxy/symR.
+Qed.
 
 End PER.
 
@@ -1787,12 +1888,12 @@ End PER.
  We define the equivalence property with prenex quantification so that it
  can be localized using the {in ..., ..} form defined below.                 **)
 
-Definition equivalence_rel := forall x y z, R z z * (R x y -> R x z = R y z).
+Definition equivalence_rel := forall x y z, R z z * (R x y -> R x z <-> R y z).
 
 Lemma equivalence_relP : equivalence_rel <-> reflexive /\ left_transitive.
 Proof.
-split=> [eqiR | [Rxx trR] x y z]; last by split=> [|/trR->].
-by split=> [x | x y Rxy z]; [rewrite (eqiR x x x) | rewrite (eqiR x y z)].
+split=> [eqiR | [Rxx trR] x y z]; last by split=> [//|Rxy]; apply: trR.
+by split=> [x | x y Rxy z]; [apply: (eqiR x x x).1|apply: (eqiR x y z).2].
 Qed.
 
 End RelationProperties.
@@ -1916,11 +2017,11 @@ Lemma in3W : {all3 P3} -> {in D1 & D2 & D3, {all3 P3}}.
 Proof. by move=> ? ?. Qed.
 
 Lemma in1T : {in T1, {all1 P1}} -> {all1 P1}.
-Proof. by move=> ? ?; auto. Qed.
+Proof. by move=> p ?; apply: p. Qed.
 Lemma in2T : {in T1 & T2, {all2 P2}} -> {all2 P2}.
-Proof. by move=> ? ?; auto. Qed.
+Proof. by move=> p ??; apply: p. Qed.
 Lemma in3T : {in T1 & T2 & T3, {all3 P3}} -> {all3 P3}.
-Proof. by move=> ? ?; auto. Qed.
+Proof. by move=> p ???; apply: p. Qed.
 
 Lemma sub_in1 (Ph : ph {all1 P1}) : prop_in1 d1' Ph -> prop_in1 d1 Ph.
 Proof. by move=> allP x /sub1; apply: allP. Qed.
@@ -1942,13 +2043,13 @@ Lemma on1lW : allQ1l f h -> {on D2, allQ1l f & h}. Proof. by move=> ? ?. Qed.
 
 Lemma on2W : allQ2 f -> {on D2 &, allQ2 f}. Proof. by move=> ? ?. Qed.
 
-Lemma on1T : {on T2, allQ1 f} -> allQ1 f. Proof. by move=> ? ?; auto. Qed.
+Lemma on1T : {on T2, allQ1 f} -> allQ1 f. Proof. by move=> p ?; apply: p. Qed.
 
 Lemma on1lT : {on T2, allQ1l f & h} -> allQ1l f h.
-Proof. by move=> ? ?; auto. Qed.
+Proof. by move=> p ?; apply: p. Qed.
 
 Lemma on2T : {on T2 &, allQ2 f} -> allQ2 f.
-Proof. by move=> ? ?; auto. Qed.
+Proof. by move=> p ??; apply: p. Qed.
 
 Lemma subon1 (Phf : ph (allQ1 f)) (Ph : ph (allQ1 f)) :
   prop_on1 d2' Phf Ph -> prop_on1 d2 Phf Ph.
@@ -1987,10 +2088,10 @@ Lemma onW_bij : bijective f -> {on D2, bijective f}.
 Proof. by case=> g' fK g'K; exists g' => * ? *; auto. Qed.
 
 Lemma inT_bij : {in T1, bijective f} -> bijective f.
-Proof. by case=> g' fK g'K; exists g' => * ? *; auto. Qed.
+Proof. by case=> g' fK g'K; exists g' => * ? *; [apply: fK|apply: g'K]. Qed.
 
 Lemma onT_bij : {on T2, bijective f} -> bijective f.
-Proof. by case=> g' fK g'K; exists g' => * ? *; auto. Qed.
+Proof. by case=> g' fK g'K; exists g' => * ? *; [apply: fK|apply: g'K]. Qed.
 
 Lemma sub_in_bij (D1' : pred T1) :
   {subset D1 <= D1'} -> {in D1', bijective f} -> {in D1, bijective f}.
@@ -2007,23 +2108,23 @@ Qed.
 Lemma in_on1P : {in D1, {on D2, allQ1 f}} <->
                 {in [pred x in D1 | f x \in D2], allQ1 f}.
 Proof.
-split => allf x; have := allf x; rewrite inE => Q1f; first by case/andP.
-by move=> ? ?; apply: Q1f; apply/andP.
+split => allf x; have := allf x; rewrite inE => Q1f; first by case.
+by move=> ? ?; apply: Q1f.
 Qed.
 
 Lemma in_on1lP : {in D1, {on D2, allQ1l f & h}} <->
                 {in [pred x in D1 | f x \in D2], allQ1l f h}.
 Proof.
-split => allf x; have := allf x; rewrite inE => Q1f; first by case/andP.
-by move=> ? ?; apply: Q1f; apply/andP.
+split => allf x; have := allf x; rewrite inE => Q1f; first by case.
+by move=> ? ?; apply: Q1f.
 Qed.
 
 Lemma in_on2P : {in D1 &, {on D2 &, allQ2 f}} <->
                 {in [pred x in D1 | f x \in D2] &, allQ2 f}.
 Proof.
 split => allf x y; have := allf x y; rewrite !inE => Q2f.
-  by move=> /andP[? ?] /andP[? ?]; apply: Q2f.
-by move=> ? ? ? ?; apply: Q2f; apply/andP.
+  by move=> [? ?] [? ?]; apply: Q2f.
+by move=> ? ? ? ?; apply: Q2f.
 Qed.
 
 Lemma on1W_in : {in D1, allQ1 f} -> {in D1, {on D2, allQ1 f}}.
@@ -2117,14 +2218,14 @@ Lemma can_in_comp [A B C : Type] (D : {pred B}) (D' : {pred C})
   {homo h : x / x \in D' >-> x \in D} ->
   {in D, cancel f f'} -> {in D', cancel h h'} ->
   {in D', cancel (f \o h) (h' \o f')}.
-Proof. by move=> hD fK hK c cD /=; rewrite fK ?hK ?hD. Qed.
+Proof. by move=> hD fK hK c cD /=; rewrite fK ?hK//; apply: hD. Qed.
 
 Lemma pcan_in_comp [A B C : Type] (D : {pred B}) (D' : {pred C})
   [f : B -> A] [h : C -> B] [f' : A -> option B] [h' : B -> option C] :
   {homo h : x / x \in D' >-> x \in D} ->
   {in D, pcancel f f'} -> {in D', pcancel h h'} ->
   {in D', pcancel (f \o h) (obind h' \o f')}.
-Proof. by move=> hD fK hK c cD /=; rewrite fK/= ?hK ?hD. Qed.
+Proof. by move=> hD fK hK c cD /=; rewrite fK/= ?hK//; apply: hD. Qed.
 
 Definition pred_oapp T (D : {pred T}) : pred (option T) :=
   [pred x | oapp (mem D) false x].
@@ -2184,10 +2285,13 @@ Proof. by move=> /= sub sub3; apply: sub_in111. Qed.
 
 Lemma equivalence_relP_in T (R : rel T) (A : pred T) :
   {in A & &, equivalence_rel R}
-   <-> {in A, reflexive R} /\ {in A &, forall x y, R x y -> {in A, R x =1 R y}}.
+   <-> {in A, reflexive R} /\ {in A &, forall x y, R x y -> {in A, forall z, (R x z <-> R y z)}}.
 Proof.
-split=> [eqiR | [Rxx trR] x y z *]; last by split=> [|/trR-> //]; apply: Rxx.
-by split=> [x Ax|x y Ax Ay Rxy z Az]; [rewrite (eqiR x x) | rewrite (eqiR x y)].
+split=> [eqiR | [Rxx trR] x y z xA yA zB]; last first.
+  split=> [|Rxy]; first exact: Rxx.
+  by move: (trR x y xA yA Rxy) => {}Rxy; split=> /Rxy; apply.
+split=> [x Ax|x y Ax Ay Rxy z Az]; first exact: (eqiR x x x _ _ _).1.
+exact: (eqiR x y z _ _ _).2.
 Qed.
 
 Section MonoHomoMorphismTheory.
@@ -2196,11 +2300,11 @@ Variables (aT rT sT : Type) (f : aT -> rT) (g : rT -> aT).
 Variables (aP : pred aT) (rP : pred rT) (aR : rel aT) (rR : rel rT).
 
 Lemma monoW : {mono f : x / aP x >-> rP x} -> {homo f : x / aP x >-> rP x}.
-Proof. by move=> hf x ax; rewrite hf. Qed.
+Proof. by move=> hf x ax; apply/hf. Qed.
 
 Lemma mono2W :
   {mono f : x y / aR x y >-> rR x y} -> {homo f : x y / aR x y >-> rR x y}.
-Proof. by move=> hf x y axy; rewrite hf. Qed.
+Proof. by move=> hf x y axy; apply/hf. Qed.
 
 Hypothesis fgK : cancel g f.
 
@@ -2215,22 +2319,19 @@ Proof. by move=> Hf x y /Hf; rewrite fgK. Qed.
 Lemma homo_mono :
     {homo f : x y / aR x y >-> rR x y} -> {homo g : x y / rR x y >-> aR x y} ->
   {mono g : x y / rR x y >-> aR x y}.
-Proof.
-move=> mf mg x y; case: (boolP (rR _ _))=> [/mg //|].
-by apply: contraNF=> /mf; rewrite !fgK.
-Qed.
+Proof. by move=> mf mg x y; split=> [/mf|/mg//]; rewrite !fgK. Qed.
 
 Lemma monoLR :
-  {mono f : x y / aR x y >-> rR x y} -> forall x y, rR (f x) y = aR x (g y).
-Proof. by move=> mf x y; rewrite -{1}[y]fgK mf. Qed.
+  {mono f : x y / aR x y >-> rR x y} -> forall x y, rR (f x) y <-> aR x (g y).
+Proof. by move=> mf x y; rewrite -{1}[y]fgK; apply: mf. Qed.
 
 Lemma monoRL :
-  {mono f : x y / aR x y >-> rR x y} -> forall x y, rR x (f y) = aR (g x) y.
-Proof. by move=> mf x y; rewrite -{1}[x]fgK mf. Qed.
+  {mono f : x y / aR x y >-> rR x y} -> forall x y, rR x (f y) <-> aR (g x) y.
+Proof. by move=> mf x y; rewrite -{1}[x]fgK; apply: mf. Qed.
 
 Lemma can_mono :
   {mono f : x y / aR x y >-> rR x y} -> {mono g : x y / rR x y >-> aR x y}.
-Proof. by move=> mf x y /=; rewrite -mf !fgK. Qed.
+Proof. by move=> mf x y /=; rewrite -{2}[x]fgK -{2}[y]fgK; split=> /mf. Qed.
 
 End MonoHomoMorphismTheory.
 
@@ -2243,14 +2344,14 @@ Variable (aP : pred aT) (rP : pred rT) (aR : rel aT) (rR : rel rT).
 Lemma mono1W_in :
     {in aD, {mono f : x / aP x >-> rP x}} ->
   {in aD, {homo f : x / aP x >-> rP x}}.
-Proof. by move=> hf x hx ax; rewrite hf. Qed.
+Proof. by move=> hf x hx ax; apply/hf. Qed.
 #[deprecated(since="Coq 8.16", note="Use mono1W_in instead.")]
 Abbreviation mono2W_in := mono1W_in.
 
 Lemma monoW_in :
     {in aD &, {mono f : x y / aR x y >-> rR x y}} ->
   {in aD &, {homo f : x y / aR x y >-> rR x y}}.
-Proof. by move=> hf x y hx hy axy; rewrite hf. Qed.
+Proof. by move=> hf x y hx hy axy; apply/hf. Qed.
 
 Hypothesis fgK : {in rD, {on aD, cancel g & f}}.
 Hypothesis mem_g : {homo g : x / x \in rD >-> x \in aD}.
@@ -2258,36 +2359,55 @@ Hypothesis mem_g : {homo g : x / x \in rD >-> x \in aD}.
 Lemma homoRL_in :
     {in aD &, {homo f : x y / aR x y >-> rR x y}} ->
   {in rD & aD, forall x y, aR (g x) y -> rR x (f y)}.
-Proof. by move=> Hf x y hx hy /Hf; rewrite fgK ?mem_g// ?inE; apply. Qed.
+Proof.
+by move=> Hf x y hx hy /Hf-/(_ (mem_g hx) hy); rewrite fgK//; apply: mem_g.
+Qed.
 
 Lemma homoLR_in :
     {in aD &, {homo f : x y / aR x y >-> rR x y}} ->
   {in aD & rD, forall x y, aR x (g y) -> rR (f x) y}.
-Proof. by move=> Hf x y hx hy /Hf; rewrite fgK ?mem_g// ?inE; apply. Qed.
+Proof.
+by move=> Hf x y hx hy /Hf-/(_ hx (mem_g hy)); rewrite fgK//; apply: mem_g.
+Qed.
 
+Ltac print_goal :=
+  match goal with
+  | _ : _ |- ?G => idtac G
+  end.
 Lemma homo_mono_in :
     {in aD &, {homo f : x y / aR x y >-> rR x y}} ->
     {in rD &, {homo g : x y / rR x y >-> aR x y}} ->
   {in rD &, {mono g : x y / rR x y >-> aR x y}}.
 Proof.
-move=> mf mg x y hx hy; case: (boolP (rR _ _))=> [/mg //|]; first exact.
-by apply: contraNF=> /mf; rewrite !fgK ?mem_g//; apply.
+move=> mf mg x y hx hy; split=> [/mf|/mg]; last by apply.
+rewrite !fgK//; try exact: mem_g.
+by apply; apply: mem_g.
 Qed.
 
 Lemma monoLR_in :
     {in aD &, {mono f : x y / aR x y >-> rR x y}} ->
-  {in aD & rD, forall x y, rR (f x) y = aR x (g y)}.
-Proof. by move=> mf x y hx hy; rewrite -{1}[y]fgK ?mem_g// mf ?mem_g. Qed.
+  {in aD & rD, forall x y, rR (f x) y <-> aR x (g y)}.
+Proof.
+move=> mf x y hx hy; rewrite -{1}[y](fgK _ (mem_g _))//.
+by apply/mf => //; apply: mem_g.
+Qed.
 
 Lemma monoRL_in :
     {in aD &, {mono f : x y / aR x y >-> rR x y}} ->
-  {in rD & aD, forall x y, rR x (f y) = aR (g x) y}.
-Proof. by move=> mf x y hx hy; rewrite -{1}[x]fgK ?mem_g// mf ?mem_g. Qed.
+  {in rD & aD, forall x y, rR x (f y) <-> aR (g x) y}.
+Proof.
+move=> mf x y hx hy; rewrite -{1}[x](fgK _ (mem_g _))//.
+by apply/mf => //; apply: mem_g.
+Qed.
 
 Lemma can_mono_in :
     {in aD &, {mono f : x y / aR x y >-> rR x y}} ->
   {in rD &, {mono g : x y / rR x y >-> aR x y}}.
-Proof. by move=> mf x y hx hy; rewrite -mf ?mem_g// !fgK ?mem_g. Qed.
+Proof.
+move=> mf x y hx hy /=.
+rewrite -{2}[x](fgK _ (mem_g _))// -{2}[y](fgK _ (mem_g _))//.
+by split=> /mf; apply=> //; apply: mem_g.
+Qed.
 
 End MonoHomoMorphismTheory_in.
 Arguments homoRL_in {aT rT f g aD rD aR rR}.
@@ -2373,15 +2493,15 @@ Variables (f : aT -> rT) (g : rT -> aT).
 Lemma inj_can_sym_in_on :
     {homo f : x / x \in aD >-> x \in rD} -> {in aD, {on rD, cancel f & g}} ->
   {in rD &, {on aD &, injective g}} -> {in rD, {on aD, cancel g & f}}.
-Proof. by move=> fD fK gI x x_rD gx_aD; apply: gI; rewrite ?inE ?fK ?fD. Qed.
+Proof. by move=> fD fK + x x_rD gx_aD; apply; rewrite ?fK//; apply: fD. Qed.
 
 Lemma inj_can_sym_on : {in aD, cancel f g} ->
   {on aD &, injective g} -> {on aD, cancel g & f}.
-Proof. by move=> fK gI x gx_aD; apply: gI; rewrite ?inE ?fK. Qed.
+Proof. by move=> fK gI x gx_aD; apply: gI; rewrite ?fK. Qed.
 
 Lemma inj_can_sym_in : {homo f \o g : x / x \in rD} -> {on rD, cancel f & g} ->
   {in rD &, injective g} ->  {in rD, cancel g f}.
-Proof. by move=> fgD fK gI x x_rD; apply: gI; rewrite ?fK ?fgD. Qed.
+Proof. by move=> fgD fK gI x x_rD; apply: gI; rewrite ?fK//; apply: fgD. Qed.
 
 End inj_can_sym_in_on.
 Arguments inj_can_sym_in_on {aT rT aD rD f g}.

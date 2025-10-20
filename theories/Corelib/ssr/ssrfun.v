@@ -622,9 +622,9 @@ Definition homomorphism_2 (aR rR : _ -> _ -> Prop) :=
   forall x y, aR x y -> rR (f x) (f y).
 
 (**  Stability property for unary and binary relations  **)
-Definition monomorphism_1 (aP rP : _ -> sT) := forall x, rP (f x) = aP x.
-Definition monomorphism_2 (aR rR : _ -> _ -> sT) :=
-  forall x y, rR (f x) (f y) = aR x y.
+Definition monomorphism_1 (aP rP : _ -> Prop) := forall x, rP (f x) <-> aP x.
+Definition monomorphism_2 (aR rR : _ -> _ -> Prop) :=
+  forall x y, rR (f x) (f y) <-> aR x y.
 
 End Morphism.
 
