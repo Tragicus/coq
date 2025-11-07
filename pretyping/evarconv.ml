@@ -823,9 +823,10 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
           solve_simple_eqn (conv_fun evar_conv_x) flags env evd
             (position_problem l2r pbty,ev,t2)
   in
-  let consume_stack l2r (termF,skF) (termO,skO) evd =
+  let consume_stack l2r noapp (termF,skF) (termO,skO) evd =
     let switch f a b = if l2r then f a b else f b a in
     let not_only_app = Stack.not_purely_applicative skO in
+    if noapp && not (Stack.not_purely_applicative skF) then quick_fail evd else
     match switch (ise_stack2 not_only_app env evd (evar_conv_x flags)) skF skO with
     | Some (l,r), Success i' when l2r && (not_only_app || List.is_empty l) ->
         (* E[?n]=E'[redex] reduces to either l[?n]=r[redex] with
@@ -847,8 +848,12 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
       flags.open_ts env' evd (c'1, Stack.empty) in
     let out2 = whd_nored_state env' evd
       (lift 1 (Stack.zip evd (term', sk')), Stack.append_app [|EConstr.mkRel 1|] Stack.empty) in
-    if onleft then evar_eqappr_x flags env' evd CONV hds None out1 out2
-    else evar_eqappr_x flags env' evd CONV (snd hds, fst hds) None out2 out1
+    let hd1 = whd_nored_state env' evd
+      (lift 1 (Stack.zip evd (fst hds)), Stack.append_app [|EConstr.mkRel 1|] Stack.empty) in
+    let hd2 = whd_nored_state env' evd
+      (lift 1 (Stack.zip evd (snd hds)), Stack.append_app [|EConstr.mkRel 1|] Stack.empty) in
+    if onleft then evar_eqappr_x flags env' evd CONV (hd1, hd2) None out1 out2
+    else evar_eqappr_x flags env' evd CONV (hd2, hd1) None out2 out1
   in
   let rigids env evd sk term sk' term' =
     let nargs = Stack.args_size sk in
@@ -860,23 +865,23 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
           with UGraph.UniverseInconsistency p -> UnifFailure (i, UnifUnivInconsistency p));
          (fun i -> exact_ise_stack2 env i (evar_conv_x flags) sk sk')]
   in
-  let consume l2r (_, skF as apprF) (_,skM as apprM) i =
+  let consume l2r noapp (_, skF as apprF) (_,skM as apprM) i =
     if not (Stack.is_empty skF && Stack.is_empty skM) then
-      consume_stack l2r apprF apprM i
+      consume_stack l2r noapp apprF apprM i
     else quick_fail i
   in
-  let miller l2r ev (termF,skF as apprF) (termM, skM as apprM) i =
+  let miller l2r postpone ev (termF,skF as apprF) (termM, skM as apprM) i =
     let switch f a b = if l2r then f a b else f b a in
-    let not_only_app = Stack.not_purely_applicative skM in
-      match Stack.list_of_app_stack skF with
-      | None -> quick_fail evd
-      | Some lF ->
-        let tM = Stack.zip evd apprM in
-          miller_pfenning l2r
-            (fun () -> if not_only_app then (* Postpone the use of an heuristic *)
-              switch (fun x y -> Success (Evarutil.add_unification_pb (pbty,env,x,y) i)) (Stack.zip evd apprF) tM
-            else quick_fail i)
-            ev lF tM i
+    match Stack.list_of_app_stack skF with
+    | None -> quick_fail evd
+    | Some lF ->
+      let tM = Stack.zip evd apprM in
+        miller_pfenning l2r
+          (fun () -> if Stack.not_purely_applicative skM then (* Postpone the use of an heuristic *)
+            if not postpone then let () = debug_unification (fun () -> Pp.(str "prevent miller from postponing")) in quick_fail i else
+            switch (fun x y -> Success (Evarutil.add_unification_pb (pbty,env,x,y) i)) (Stack.zip evd apprF) (Stack.zip evd (if l2r then snd hds else fst hds))
+          else quick_fail i)
+          ev lF tM i
   in
   (* Evar must be undefined since we have flushed evars *)
   let rec get_cs flags env sigma p1 appr1 appr2 =
@@ -890,7 +895,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
       let (term2, sk2) = appr2 in
       match flex_kind_of_term flags env sigma term2 sk2 with
       | Rigid -> UnifFailure (sigma, NoCanonicalStructure)
-      | Flexible ev -> miller (lastUnfolded = Some false) ev appr2 appr1 sigma
+      | Flexible ev -> miller (lastUnfolded = Some false) true ev appr2 appr1 sigma
       | MaybeFlexible vsk2' ->
         let appr2 = whd_betaiota_deltazeta_for_iota_state flags.open_ts env sigma vsk2' in
         get_cs flags env sigma p1 appr1 appr2 in
@@ -913,9 +918,9 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
       switch (evar_eqappr_x flags env i pbty hds (Some (not l2r))) apprF
         (whd_betaiota_deltazeta_for_iota_state flags.open_ts env i vskM)
     in
-    let default i = ise_try i [miller l2r ev apprF apprM;
+    let default i = ise_try i [miller l2r false ev apprF apprM;
+                               consume l2r true apprF apprM;
                                cs;
-                               consume l2r apprF apprM;
                                delta]
     in
       match EConstr.kind evd termM with
@@ -940,8 +945,8 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
                   let delta' i =
                     switch (evar_eqappr_x flags env i pbty hds None) apprF apprM'
                   in
-                  fun i -> ise_try i [miller l2r ev apprF apprM'; cs;
-                                   consume l2r apprF apprM'; delta']
+                  fun i -> ise_try i [miller l2r false ev apprF apprM'; cs;
+                                   consume l2r true apprF apprM'; delta']
                 with Retyping.RetypeError _ ->
                 (* Happens thanks to w_unify building ill-typed terms *)
                   default
@@ -978,7 +983,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
       with _ -> quick_fail evd in
     match Stack.list_of_app_stack skF with
     | None ->
-        ise_try evd [consume_stack l2r apprF apprR; eta; tc]
+        ise_try evd [consume l2r true apprF apprR; eta; tc]
     | Some lF ->
         let tR = Stack.zip evd apprR in
         let postpone i =
@@ -992,7 +997,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
             else
               i,Stack.zip evd apprF in
           switch (fun x y -> Success (Evarutil.add_unification_pb (pbty,env,x,y) i))
-            tF tR in
+            tF (Stack.zip evd (if l2r then snd hds else fst hds)) in
         ise_try evd [
           (fun evd -> miller_pfenning l2r (fun () -> ise_try evd [eta;(* Postpone the use of an heuristic *) postpone]) ev lF tR evd);
           eta]
@@ -1095,14 +1100,14 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
             |_, (UnifFailure _ as x) -> x
             |Some _, _ -> UnifFailure (i,NotSameArgSize)
           else UnifFailure (i,NotSameHead)
-        and f3 i = miller true (sp1,al1) appr1 appr2 i
-        and f4 i = miller false (sp2,al2) appr2 appr1 i
+        and f3 i = miller true true (sp1,al1) appr1 appr2 i
+        and f4 i = miller false true (sp2,al2) appr2 appr1 i
         and f5 i =
           (* We ensure failure of consuming the stacks does not
              propagate an error about unification of the stacks while
              the heads themselves cannot be unified, so we return
              NotSameHead. *)
-          match consume true appr1 appr2 i with
+          match consume true false appr1 appr2 i with
           | Success _ as x -> x
           | UnifFailure _ -> quick_fail i
         and f6 i =
