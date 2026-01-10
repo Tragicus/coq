@@ -281,15 +281,15 @@ let interp_view ~clear_if_id ist v p =
      (* We find out how to build (v p) eventually using an adaptor *)
      let adaptors = AdaptorDb.(get Forward) in
      Proofview.tclORELSE
-       (pad_to_inductive ist v >>= fun (vpad,clr) ->
-        Ssrcommon.tclFIRSTa (List.map
-          (fun a -> interp_glob ist (mkGApp a [vpad; p_id])) adaptors)
-        >>= tclPAIR clr)
-       (fun _ ->
-        guess_max_implicits ist v >>= fun n ->
+       (guess_max_implicits ist v >>= fun n ->
         Ssrcommon.tclFIRSTi (fun n ->
            interp_glob ist (mkGApp v (mkGHoles n @ [p_id]))) n
         >>= fun x -> tclADD_CLEAR_IF_ID x x)
+       (fun _ ->
+        pad_to_inductive ist v >>= fun (vpad,clr) ->
+        Ssrcommon.tclFIRSTa (List.map
+          (fun a -> interp_glob ist (mkGApp a [vpad; p_id])) adaptors)
+        >>= tclPAIR clr)
      >>= fun (ot,clr) ->
        if clear_if_id
        then tclKeepOpenConstr ot >>= tclPAIR clr

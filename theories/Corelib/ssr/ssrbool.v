@@ -830,10 +830,6 @@ Hint View for apply/ introTF|3 introNTF|3 introTFn|3 elimT|2 elimTn|2 elimN|2.
 
 Hint View for apply// equivPif|3 xorPif|3 equivPifn|3 xorPifn|3.
 
-(**  Allow the direct application of a reflection lemma to a boolean assertion.  **)
-Coercion elimT : reflect >-> Funclass.
-
-
 #[universes(template)]
 Variant implies P Q := Implies of P -> Q.
 Lemma impliesP P Q : implies P Q -> P -> Q. Proof. by case. Qed.
