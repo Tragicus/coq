@@ -12,6 +12,7 @@
 
 (** #<style> .doc { font-family: monospace; white-space: pre; } </style># **)
 
+Require Import Setoid.
 Require Import ssreflect ssrfun.
 
 (**
@@ -503,7 +504,14 @@ Structure decProp := DecProp {
   propbP : reflect prop propb
   }.
 
+Notation "? b" := (propb b) (at level 2).
+Arguments propb : simpl nomatch.
+
 #[global] Hint Resolve propbP : core.
+
+Class Unfold_prop {T : Type} (x y : T) := {}.
+Hint Extern 1 (@Unfold_prop _ ?x ?y) =>
+  rewrite /prop; exact (@Build_Unfold_prop _ y y) : typeclass_instances.
 
 (**   Predicate family to reflect excluded middle in bool.  **)
 Variant alt_spec (P : decProp) : bool -> Type :=
@@ -1244,6 +1252,299 @@ Ltac bool_congr :=
   | |- (~~ ?X1 = ?X2) => congr 1 negb
   end.
 
+Lemma iffT P : P -> P <-> True. Proof. by []. Qed.
+Lemma iffF P : ~ P -> P <-> False. Proof. by []. Qed.
+
+Lemma iffpp P : P <-> P. Proof. by []. Qed.
+Lemma iffpC P Q : (P <-> Q) <-> (Q <-> P). Proof. by split=> -[]. Qed.
+
+Lemma iffpT P : (P <-> True) <-> P.
+Proof. by split=> // -[] _; apply. Qed.
+
+Lemma iffTp P : (True <-> P) <-> P.
+Proof. by split=> // -[] + _; apply. Qed.
+
+Lemma iffpF P : (P <-> False) <-> (~ P).
+Proof. by split=> // -[]. Qed.
+
+Lemma iffFp P : (False <-> P) <-> (~ P).
+Proof. by split=> // -[]. Qed.
+
+Lemma reflectP (P Q : decProp) : (P <-> Q) <-> (? P = ? Q).
+Proof.
+by case: (propbP P) => [/iffT|/iffF] ->;
+  case: (propbP Q) => [/iffT|/iffF] -> //; split=> // -[]//.
+Qed.
+
+Lemma propbE (P Q : decProp) {RP RQ : Prop} `{@Unfold_prop Prop (prop P) RP} `{@Unfold_prop Prop (prop Q) RQ} : (P <-> Q) -> (? (reverse_coercion P RP) = ? (reverse_coercion Q RQ)).
+Proof. by move/reflectP. Qed.
+
+Lemma negpF : ~ False. Proof. by []. Qed.
+
+Lemma negpK (P : decProp) : ~ ~ P <-> P.
+Proof. by (split=> p; last by apply); case: (propbP P) => // /p. Qed.
+
+Lemma andTp P : True /\ P <-> P.
+Proof. by split=> [[]|]. Qed.
+
+Lemma andFp P : ~ (False /\ P).
+Proof. by move=> []. Qed.
+
+Lemma andpT P : P /\ True <-> P.
+Proof. by split=> [[]|]. Qed.
+
+Lemma andpF P : ~ (P /\ False).
+Proof. by move=> []. Qed.
+
+Lemma andpp P : P /\ P <-> P.
+Proof. by split=> [[]|]. Qed.
+
+Lemma andpC P Q : P /\ Q <-> Q /\ P.
+Proof. by split=> -[]. Qed.
+
+Lemma andpA P Q R : (P /\ Q) /\ R <-> P /\ Q /\ R.
+Proof. by split=> [[][]|[]+[]]. Qed.
+
+Lemma andpCA P Q R : P /\ (Q /\ R) <-> Q /\ (P /\ R).
+Proof. by split=> -[]+[]. Qed.
+
+Lemma andpAC P Q R : (P /\ Q) /\ R <-> (P /\ R) /\ Q.
+Proof. by split=> -[][]. Qed.
+
+Lemma andpACA P Q R S : (P /\ Q) /\ (R /\ S) <-> (P /\ R) /\ (Q /\ S).
+Proof. by split=> -[][]++[]. Qed.
+
+Lemma orTp P : True \/ P.
+Proof. by left. Qed.
+
+Lemma orFp P : False \/ P <-> P.
+Proof. by split=> [[]//|?]; right. Qed.
+
+Lemma orpT P : P \/ True.
+Proof. by right. Qed.
+
+Lemma orpF P : P \/ False <-> P.
+Proof. by split=> [[]//|?]; left. Qed.
+
+Lemma orpp P : P \/ P <-> P.
+Proof. by split=> [[]//|?]; left. Qed.
+
+Lemma orpC P Q : P \/ Q <-> Q \/ P.
+Proof. by split; (move=> -[]?; [right|left]). Qed.
+
+Lemma orpA P Q R : (P \/ Q) \/ R <-> P \/ Q \/ R.
+Proof.
+by split; move=> -[]; (try case) => ?;
+  [left|right; left|right; right|left; left|left; right|right].
+Qed.
+
+Lemma orpCA P Q R : P \/ (Q \/ R) <-> (Q \/ (P \/ R)).
+Proof. by rewrite -orpA (orpC P) orpA. Qed.
+
+Lemma orpAC P Q R : (P \/ Q) \/ R <-> (P \/ R) \/ Q.
+Proof. by rewrite orpA (orpC Q) -orpA. Qed.
+
+Lemma orpACA P Q R S : (P \/ Q) \/ (R \/ S) <-> (P \/ R) \/ (Q \/ S).
+Proof. by rewrite orpAC -orpA -orpAC orpA. Qed.
+
+Lemma andpN P : ~ (P /\ ~ P).
+Proof. by move=> [] ?; apply. Qed.
+
+Lemma andNp P : ~ (~ P /\ P).
+Proof. by move=> [] /[apply]. Qed.
+
+Lemma orpN (P : decProp) : P \/ ~ P.
+Proof. by case: (propbP P) => p; [left|right]. Qed.
+
+Lemma orNp (P : decProp) : ~ P \/ P.
+Proof. by rewrite orpC (iffT (orpN _)). Qed.
+
+Lemma andp_orl P Q R : (P \/ Q) /\ R <-> (P /\ R) \/ (Q /\ R).
+Proof.
+by (split=> -[][]??; [left|right| |]) => //; split=> //; [left|right].
+Qed.
+
+Lemma andp_orr P Q R : P /\ (Q \/ R) <-> (P /\ Q) \/ (P /\ R).
+Proof. by rewrite andpC andp_orl andpC (andpC R). Qed.
+
+Lemma orp_andl P Q R : (P /\ Q) \/ R <-> (P \/ R) /\ (Q \/ R).
+Proof.
+by split=> [[[]?|]?|[][?[]?|? _]]; [split; left|split; right|left|right|right].
+Qed.
+
+Lemma orp_andr P Q R : P \/ (Q /\ R) <-> (P \/ Q) /\ (P \/ R).
+Proof. by rewrite orpC orp_andl orpC (orpC R). Qed.
+
+
+Lemma andp_idl P Q : (Q -> P) -> P /\ Q <-> Q.
+Proof. by move=> QP; split=> [[]|/[dup]/QP]. Qed.
+Lemma andp_idr P Q : (P -> Q) -> P /\ Q <-> P.
+Proof. by rewrite andpC (iffT (@andp_idl _ _)). Qed.
+Lemma andp_id2l P Q R : (P -> Q <-> R) -> P /\ Q <-> P /\ R.
+Proof. by move=> PQR; split=> -[] ?; rewrite PQR. Qed.
+Lemma andp_id2r P Q R : (Q -> P <-> R) -> P /\ Q <-> R /\ Q.
+Proof. by rewrite ![_ /\ Q]andpC (iffT (@andp_id2l _ _ _)). Qed.
+
+Lemma orp_idl P Q : (Q -> P) -> P \/ Q <-> P.
+Proof. by move=> QP; split=> [[|/QP]//|]?; left. Qed.
+Lemma orp_idr P Q : (P -> Q) -> P \/ Q <-> Q.
+Proof. by rewrite orpC (iffT (@orp_idl _ _)). Qed.
+Lemma orp_id2l (P : decProp) Q R :
+  (~ P -> Q <-> R) -> P \/ Q <-> P \/ R.
+Proof. by move=> PQR; case: (propbP P) => [|/PQR -> //]; split; left. Qed.
+Lemma orp_id2r P (Q : decProp) R : (~ Q -> P <-> R) -> P \/ Q <-> R \/ Q.
+Proof. by rewrite ![_ \/ Q]orpC (iffT (@orp_id2l _ _ _)). Qed.
+
+Lemma negp_and (P Q : decProp) : ~ (P /\ Q) <-> ~ P \/ ~ Q.
+Proof.
+by case: (propbP P) => [/iffT|/iffF] ->;
+  case: (propbP Q) => [/iffT|/iffF] ->;
+  apply/propbP.
+Qed.
+
+Lemma negp_or P Q : ~ (P \/ Q) <-> (~ P) /\ ~ Q.
+Proof. by split=> [pq|[]p q [/p|/q]//]; split=> ?; apply: pq; [left|right]. Qed.
+
+(**  Pseudo-cancellation -- i.e, absorption  **)
+
+Lemma andpK P Q : P /\ Q \/ P <-> P. Proof. by split=> [[[]|]//|?]; right. Qed.
+Lemma andKp P Q : P \/ Q /\ P <-> P. Proof. by split=> [[|[]]//|?]; left. Qed.
+Lemma orpK P Q : (P \/ Q) /\ P <-> P.
+Proof. by split=> [[]//|?]; split=> //; left. Qed.
+Lemma orKp P Q : P /\ (Q \/ P) <-> P.
+Proof. by split=> [[]//|?]; split=> //; right. Qed.
+
+(**  Imply  **)
+
+Lemma implypT P : P -> True.            Proof. by []. Qed.
+Lemma implypF P : (P -> False) <-> ~ P. Proof. by []. Qed.
+Lemma implyFP P : False -> P.           Proof. by []. Qed.
+Lemma implyTp P : (True -> P) <-> P.    Proof. by split=> //; apply. Qed.
+Lemma implypp P : P -> P.               Proof. by []. Qed.
+
+Lemma negp_imply (P : decProp) Q : ~ (P -> Q) <-> P /\ ~ Q.
+Proof.
+split=> [|[]p q /(_ p)/q//] pq; split=> [|q]; last exact: pq.
+by case: (propbP P) => // p; elim: pq => /p.
+Qed.
+
+Lemma implypE (P : decProp) Q : (P -> Q) <-> ~ P \/ Q.
+Proof. by split=> [pq|[]//]; case: (propbP P) => [/pq|] ?; [right|left]. Qed.
+
+Lemma implyNp (P : decProp) Q : (~ P -> Q) <-> P \/ Q.
+Proof. by rewrite implypE negpK. Qed.
+
+Lemma implypN P Q : (P -> ~ Q) <-> (Q -> ~ P).
+Proof. by split=> /[apply]. Qed.
+
+Lemma implypNN (P : decProp) Q : (~ P -> ~ Q) <-> (Q -> P).
+Proof. by split=> [/[apply]|qp ? /qp//]; rewrite [_ -> False]negpK. Qed.
+
+Lemma iffNN (P Q : decProp) : (~ P <-> ~ Q) <-> (P <-> Q).
+Proof. by rewrite /iff !implypNN ![(Q -> _) /\ _]andpC. Qed.
+
+Lemma implyp_idl (P : decProp) Q : (~ P -> Q) -> (P -> Q) <-> Q.
+Proof. by move=> npq; split=> // pq; case: (propbP P) => [/pq|/npq]. Qed.
+Lemma implyp_idr (P : decProp) Q : (Q -> ~ P) -> (P -> Q) <-> ~ P.
+Proof.
+by move=> qnp; split=> [pq|/[apply]//]; case: (propbP P) => [/pq/qnp|].
+Qed.
+Lemma implyp_id2l T P Q : (forall x : T, P x <-> Q x) -> (forall x, P x) <-> (forall x, Q x).
+Proof.
+move=> xqr; split=> + x.
+(* FIXME: This looks like a bug either in setoid_rewrite or in ssrmatching. *)
+  by rewrite -(xqr x); apply.
+by rewrite (xqr x); apply.
+Qed.
+
+Definition xor (P Q : Prop) :=
+  (P \/ Q) /\ ~ (P /\ Q).
+
+Instance xor_iff_morphism : Morphisms.Proper (iff ==> iff ==> iff) xor.
+Proof. by move=> P Q PQ R S RS; rewrite /xor PQ RS. Qed.
+
+Lemma xorpC P Q : xor P Q <-> xor Q P.
+Proof. by rewrite /xor orpC (andpC P). Qed.
+
+Lemma xorFp P : xor False P <-> P.
+Proof. by split=> [[]/orFp//|p]; split=> [|[]//]; right. Qed.
+
+Lemma xorpF P : xor P False <-> P.
+Proof. by rewrite xorpC xorFp. Qed.
+
+Lemma xorTp P : xor True P <-> ~ P.
+Proof. by rewrite /xor (iffT (orTp _)) !andTp. Qed.
+
+Lemma xorpT P : xor P True <-> ~ P.
+Proof. by rewrite xorpC xorTp. Qed.
+
+Lemma xorP (P Q : decProp) : reflect (xor P Q) (addb P Q).
+Proof.
+case: (propbP P) => [/iffT|/iffF] p.
+  apply: (@equivP (~ Q)); first exact: negPP.
+  by rewrite p xorTp.
+apply: (@equivP Q); first exact: propbP.
+by rewrite p xorFp.
+Qed.
+
+Canonical xor_decProp (P Q : decProp) := {|
+  prop := xor P Q;
+  propb := addb P Q;
+  propbP := xorP P Q
+|}.
+
+Lemma xorpp P : ~ (xor P P).
+Proof. by move=> [] /orpp p; rewrite andpp; apply. Qed.
+
+Lemma xorpN (P : decProp) Q : xor P (~ Q) <-> ~ (xor P Q).
+Proof. by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorTp ?xorFp. Qed.
+
+Lemma xorNp P (Q : decProp) : xor (~ P) Q <-> ~ (xor P Q).
+Proof. by rewrite xorpC xorpN xorpC. Qed.
+
+Lemma xorpA (P : decProp) Q (R : decProp) : xor P (xor Q R) <-> xor (xor P Q) R.
+Proof.
+by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp xorNp.
+Qed.
+
+Lemma xorpCA (P Q : decProp) R : xor P (xor Q R) <-> xor Q (xor P R).
+Proof.
+by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp xorpN.
+Qed.
+
+Lemma xorpAC P (Q R : decProp) : xor (xor P Q) R <-> xor (xor P R) Q.
+Proof. by rewrite ![xor (xor _ _) _]xorpC !(xorpC P) xorpCA. Qed.
+
+Lemma xorpACA (P Q R S : decProp) :
+  xor (xor P Q) (xor R S) <-> xor (xor P R) (xor Q S).
+Proof. by rewrite !xorpA/= -(xorpA _ _ R) (xorpC Q) xorpA. Qed.
+
+Lemma andp_xorl P Q R : (xor P Q) /\ R <-> xor (P /\ R) (Q /\ R).
+Proof.
+rewrite /xor -andp_orl andpACA andpp andpAC.
+by apply: andp_id2l => -[] _ /iffT ->; rewrite andpT.
+Qed.
+
+Lemma andp_xorr P Q R : P /\ (xor Q R) <-> xor (P /\ Q) (P /\ R).
+Proof. by rewrite andpC andp_xorl !(andpC P). Qed.
+
+Lemma xorKp (P Q : decProp) : xor P (xor P Q) <-> Q.
+Proof.
+by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp negpK.
+Qed.
+
+Lemma xorpK (P Q : decProp) : xor (xor Q P) P <-> Q.
+Proof. by rewrite ![xor _ P]xorpC xorKp. Qed.
+
+Lemma xorpP (P : decProp) Q : xor P Q <-> (~ P <-> Q).
+Proof.
+case: (propbP P) => [/iffT|/iffF] ->.
+  by rewrite xorTp (iffF (_ : ~ ~ True))// iffFp.
+by rewrite xorFp (iffT negpF) iffTp.
+Qed.
+
+Arguments xorpP {P Q}.
+
 
 (**
  Predicates, i.e., packaged functions to bool.
@@ -1366,6 +1667,10 @@ Coercion dec_toPredType T : decPredType T -> predType T :=
 Canonical dec_predDecPredType T := DecPredType (@id (dec_pred T)).
 #[warning="-redundant-canonical-projection"]
 Canonical decPropfunDecPredType T := DecPredType (@id (T -> decProp)).
+
+Lemma iff_forall T (P Q : pred T) :
+  (forall x, P x <-> Q x) -> (forall x, P x) <-> (forall x, Q x).
+Proof. by move=> PQ; split=> pq x; apply/PQ/pq. Qed.
 
 (** The type of abstract collective predicates.
  While {pred T} is convertible to pred T, it presents the pred_sort coercion
@@ -1519,7 +1824,7 @@ Coercion pred_of_mem {T} mp : {pred T} := let: Mem p := mp in [eta p].
 Canonical memPredType T := PredType (@pred_of_mem T).
 
 Definition in_mem {T} (x : T) mp := pred_of_mem mp x.
-Definition eq_mem {T} mp1 mp2 := forall x : T, in_mem x mp1 = in_mem x mp2.
+Definition eq_mem {T} mp1 mp2 := forall x : T, in_mem x mp1 <-> in_mem x mp2.
 Definition sub_mem {T} mp1 mp2 := forall x : T, in_mem x mp1 -> in_mem x mp2.
 
 Arguments in_mem {T} x mp : simpl never.
@@ -1752,7 +2057,7 @@ Structure keyed_pred (k : pred_key p) :=
   PackKeyedPred {unkey_pred :> {pred T}; _ : unkey_pred =i p}.
 
 Variable k : pred_key p.
-Definition KeyedPred := @PackKeyedPred k p (frefl _).
+Definition KeyedPred := @PackKeyedPred k p (fun x => iff_refl _).
 
 Variable k_p : keyed_pred k.
 Lemma keyed_predE : k_p =i p. Proof. by case: k_p. Qed.
