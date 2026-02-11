@@ -224,6 +224,25 @@ Ltac f_equiv :=
   | _ => idtac
  end.
 
+Global Instance forget_proper {T U : Type} {R : relation T} {S : relation U}
+  (y : U) `{Proper _ S y} : Proper (R ==> S) (fun x => y).
+Proof. firstorder. Qed.
+
+Global Instance trans_proper {T U V : Type}
+  {RT : relation T} {RU : relation U} {RV : relation V}
+  (F : U -> V) (G : T -> U)
+  `{Proper _ (RU ==> RV) F} `{Proper _ (RT ==> RU) G} :
+  Proper (RT ==> RV) (fun x => F (G x)).
+Proof. firstorder. Qed.
+
+Global Instance trans2_proper {T U1 U2 V : Type}
+  {RT : relation T} {RU1 : relation U1} {RU2 : relation U2} {RV : relation V}
+  (F : U1 -> U2 -> V) (G1 : T -> U1) (G2 : T -> U2)
+  `{Proper _ (RU1 ==> RU2 ==> RV) F}
+  `{Proper _ (RT ==> RU1) G1} `{Proper _ (RT ==> RU2) G2} :
+  Proper (RT ==> RV) (fun x => F (G1 x) (G2 x)).
+Proof. intros x y xy; apply H; [apply H0|apply H1]; exact xy. Qed.
+
 Section Relations.
   Let U := Type.
   Context {A B : U} (P : A -> U).
@@ -245,6 +264,9 @@ Section Relations.
   (** Subrelations induce a morphism on the identity. *)
   
   Global Instance subrelation_id_proper `(subrelation A RA RA') : Proper (RA ==> RA') id.
+  Proof. firstorder. Qed.
+
+  Global Instance subrelation_id_proper' `(subrelation A RA RA') : Proper (RA ==> RA') (fun x => x).
   Proof. firstorder. Qed.
 
   (** The subrelation property goes through products as usual. *)
@@ -805,3 +827,9 @@ Register RewriteRelation as rewrite.prop.RewriteRelation.
 Register Proper as rewrite.prop.Proper.
 Register proper_prf as rewrite.prop.proper_prf.
 Register ProperProxy as rewrite.prop.ProperProxy.
+
+#[global]
+Instance Proper_ReflectRw (P : Prop -> Prop) : Proper (iff ==> iff) P -> Datatypes.ReflectRw P.
+Proof.
+intros PP A B AB; rewrite AB; apply iff_refl.
+Qed.

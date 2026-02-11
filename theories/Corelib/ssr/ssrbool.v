@@ -12,7 +12,7 @@
 
 (** #<style> .doc { font-family: monospace; white-space: pre; } </style># **)
 
-Require Import Setoid.
+Require Import Setoid Morphisms.
 Require Import ssreflect ssrfun.
 
 (**
@@ -1272,8 +1272,7 @@ Proof. by split=> // -[]. Qed.
 
 Lemma reflectP (P Q : decProp) : (P <-> Q) <-> (? P = ? Q).
 Proof.
-by case: (propbP P) => [/iffT|/iffF] ->;
-  case: (propbP Q) => [/iffT|/iffF] -> //; split=> // -[]//.
+by elim: (propbP P) => _; elim: (propbP Q) => _ //; split=> // -[].
 Qed.
 
 Lemma propbE (P Q : decProp) {RP RQ : Prop} `{@Unfold_prop Prop (prop P) RP} `{@Unfold_prop Prop (prop Q) RQ} : (P <-> Q) -> (? (reverse_coercion P RP) = ? (reverse_coercion Q RQ)).
@@ -1354,7 +1353,7 @@ Lemma andNp P : ~ (~ P /\ P).
 Proof. by move=> [] /[apply]. Qed.
 
 Lemma orpN (P : decProp) : P \/ ~ P.
-Proof. by case: (propbP P) => p; [left|right]. Qed.
+Proof. by elim: (propbP P) => _; [left|right]. Qed.
 
 Lemma orNp (P : decProp) : ~ P \/ P.
 Proof. by rewrite orpC (iffT (orpN _)). Qed.
@@ -1389,18 +1388,15 @@ Lemma orp_idl P Q : (Q -> P) -> P \/ Q <-> P.
 Proof. by move=> QP; split=> [[|/QP]//|]?; left. Qed.
 Lemma orp_idr P Q : (P -> Q) -> P \/ Q <-> Q.
 Proof. by rewrite orpC (iffT (@orp_idl _ _)). Qed.
+
 Lemma orp_id2l (P : decProp) Q R :
   (~ P -> Q <-> R) -> P \/ Q <-> P \/ R.
-Proof. by move=> PQR; case: (propbP P) => [|/PQR -> //]; split; left. Qed.
+Proof. by elim: (propbP P) => [_ _|_ /(_ id) -> //]; split; left. Qed.
 Lemma orp_id2r P (Q : decProp) R : (~ Q -> P <-> R) -> P \/ Q <-> R \/ Q.
 Proof. by rewrite ![_ \/ Q]orpC (iffT (@orp_id2l _ _ _)). Qed.
 
 Lemma negp_and (P Q : decProp) : ~ (P /\ Q) <-> ~ P \/ ~ Q.
-Proof.
-by case: (propbP P) => [/iffT|/iffF] ->;
-  case: (propbP Q) => [/iffT|/iffF] ->;
-  apply/propbP.
-Qed.
+Proof. by elim: (propbP P) => _; elim: (propbP Q) => _; apply/propbP. Qed.
 
 Lemma negp_or P Q : ~ (P \/ Q) <-> (~ P) /\ ~ Q.
 Proof. by split=> [pq|[]p q [/p|/q]//]; split=> ?; apply: pq; [left|right]. Qed.
@@ -1425,7 +1421,7 @@ Lemma implypp P : P -> P.               Proof. by []. Qed.
 Lemma negp_imply (P : decProp) Q : ~ (P -> Q) <-> P /\ ~ Q.
 Proof.
 split=> [|[]p q /(_ p)/q//] pq; split=> [|q]; last exact: pq.
-by case: (propbP P) => // p; elim: pq => /p.
+by elim: (propbP P) pq => _ //; apply.
 Qed.
 
 Lemma implypE (P : decProp) Q : (P -> Q) <-> ~ P \/ Q.
@@ -1445,20 +1441,18 @@ Proof. by rewrite /iff !implypNN ![(Q -> _) /\ _]andpC. Qed.
 
 Lemma implyp_idl (P : decProp) Q : (~ P -> Q) -> (P -> Q) <-> Q.
 Proof. by move=> npq; split=> // pq; case: (propbP P) => [/pq|/npq]. Qed.
-Lemma implyp_idr (P : decProp) Q : (Q -> ~ P) -> (P -> Q) <-> ~ P.
+Lemma implyp_idr P Q : (Q -> ~ P) -> (P -> Q) <-> ~ P.
 Proof.
-by move=> qnp; split=> [pq|/[apply]//]; case: (propbP P) => [/pq/qnp|].
+by move=> qnp; split=> [pq p|/[apply]//]; apply: qnp => //; apply: pq.
 Qed.
 Lemma implyp_id2l T P Q : (forall x : T, P x <-> Q x) -> (forall x, P x) <-> (forall x, Q x).
 Proof.
 move=> xqr; split=> + x.
-(* FIXME: This looks like a bug either in setoid_rewrite or in ssrmatching. *)
   by rewrite -(xqr x); apply.
 by rewrite (xqr x); apply.
 Qed.
 
-Definition xor (P Q : Prop) :=
-  (P \/ Q) /\ ~ (P /\ Q).
+Definition xor (P Q : Prop) := (P \/ Q) /\ ~ (P /\ Q).
 
 Instance xor_iff_morphism : Morphisms.Proper (iff ==> iff ==> iff) xor.
 Proof. by move=> P Q PQ R S RS; rewrite /xor PQ RS. Qed.
@@ -1478,13 +1472,13 @@ Proof. by rewrite /xor (iffT (orTp _)) !andTp. Qed.
 Lemma xorpT P : xor P True <-> ~ P.
 Proof. by rewrite xorpC xorTp. Qed.
 
+Lemma xorpp P : ~ (xor P P).
+Proof. by move=> [] /orpp p; rewrite andpp; apply. Qed.
+
 Lemma xorP (P Q : decProp) : reflect (xor P Q) (addb P Q).
 Proof.
-case: (propbP P) => [/iffT|/iffF] p.
-  apply: (@equivP (~ Q)); first exact: negPP.
-  by rewrite p xorTp.
-apply: (@equivP Q); first exact: propbP.
-by rewrite p xorFp.
+by apply: (iffP idP); elim: (propbP P); elim: (propbP Q) => //= _ _;
+  rewrite ?(iffF (@xorpp _))// ?xorTp ?xorpT => _.
 Qed.
 
 Canonical xor_decProp (P Q : decProp) := {|
@@ -1493,23 +1487,20 @@ Canonical xor_decProp (P Q : decProp) := {|
   propbP := xorP P Q
 |}.
 
-Lemma xorpp P : ~ (xor P P).
-Proof. by move=> [] /orpp p; rewrite andpp; apply. Qed.
-
 Lemma xorpN (P : decProp) Q : xor P (~ Q) <-> ~ (xor P Q).
-Proof. by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorTp ?xorFp. Qed.
+Proof. by elim: (propbP P); rewrite ?xorTp ?xorFp. Qed.
 
 Lemma xorNp P (Q : decProp) : xor (~ P) Q <-> ~ (xor P Q).
 Proof. by rewrite xorpC xorpN xorpC. Qed.
 
 Lemma xorpA (P : decProp) Q (R : decProp) : xor P (xor Q R) <-> xor (xor P Q) R.
 Proof.
-by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp xorNp.
+by elim: (propbP P); rewrite ?xorFp// !xorTp xorNp.
 Qed.
 
 Lemma xorpCA (P Q : decProp) R : xor P (xor Q R) <-> xor Q (xor P R).
 Proof.
-by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp xorpN.
+by elim: (propbP P); rewrite ?xorFp// !xorTp xorpN.
 Qed.
 
 Lemma xorpAC P (Q R : decProp) : xor (xor P Q) R <-> xor (xor P R) Q.
@@ -1530,7 +1521,7 @@ Proof. by rewrite andpC andp_xorl !(andpC P). Qed.
 
 Lemma xorKp (P Q : decProp) : xor P (xor P Q) <-> Q.
 Proof.
-by case: (propbP P) => [/iffT|/iffF] ->; rewrite ?xorFp// !xorTp negpK.
+by elim: (propbP P); rewrite ?xorFp// !xorTp negpK.
 Qed.
 
 Lemma xorpK (P Q : decProp) : xor (xor Q P) P <-> Q.
@@ -1538,7 +1529,7 @@ Proof. by rewrite ![xor _ P]xorpC xorKp. Qed.
 
 Lemma xorpP (P : decProp) Q : xor P Q <-> (~ P <-> Q).
 Proof.
-case: (propbP P) => [/iffT|/iffF] ->.
+elim: (propbP P).
   by rewrite xorTp (iffF (_ : ~ ~ True))// iffFp.
 by rewrite xorFp (iffT negpF) iffTp.
 Qed.

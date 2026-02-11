@@ -56,9 +56,29 @@ Register false as core.bool.false.
     as popularized by the Ssreflect library.    *)
 (************************************************)
 
-Inductive reflect (P : Prop) : bool -> Set :=
+Variant reflect (P : Prop) : bool -> Set :=
   | ReflectT : P -> reflect P true
   | ReflectF : ~ P -> reflect P false.
+
+(* A specialized copy of Proper because the latter does not yet exist. *)
+Definition ReflectRw (P : Prop -> Prop) := forall (A B : Prop), A <-> B -> P A <-> P B.
+Existing Class ReflectRw.
+
+Definition reflect_ind (P : Prop)
+    (Q : forall (b : bool), Prop -> reflect P b -> Prop)
+    (ReflectT : forall p : P, Q true True (ReflectT p))
+    (ReflectF : forall p : ~ P, Q false False (ReflectF p))
+    (QRw : forall b p, ReflectRw (fun P => Q b P p))
+    (b : bool) (p : reflect P b)
+    :=
+  match
+    p as p0 in reflect _ b0 return Q b0 P p0
+  with
+  | Datatypes.ReflectT p0 => (proj2 (QRw _ _ _ _ (conj (fun _ => I) (fun _ => p0)))) (ReflectT p0)
+  | Datatypes.ReflectF p0 => (proj2 (QRw _ _ _ _ (conj (fun p1 => p0 p1) (fun f => False_ind _ f)))) (ReflectF p0)
+  end.
+
+Register Scheme reflect_ind as ind_dep for reflect.
 
 #[global]
 Create HintDb bool.

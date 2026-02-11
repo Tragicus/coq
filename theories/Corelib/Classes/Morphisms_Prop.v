@@ -57,6 +57,20 @@ Program Instance or_iff_morphism :
 #[global]
 Program Instance iff_iff_iff_impl_morphism : Proper (iff ==> iff ==> iff) impl.
 
+#[global]
+Instance iff_iff_morphism :
+  Morphisms.Proper (Morphisms.respectful iff (Morphisms.respectful iff iff)) iff.
+Proof.
+intros Pl Pr [Plr Prl] Ql Qr [Qlr Qrl]; split; intros [PQ QP]; split; auto.
+Qed.
+
+#[global]
+Instance impl_iff_morphism {T : Type} {RT : Relation_Definitions.relation T}
+  (F1 : T -> Prop) (F2 : T -> Prop)
+  `{Proper _ (RT ==> iff) F1} `{Proper _ (RT ==> iff) F2} :
+  Proper (RT ==> iff) (fun x => F1 x -> F2 x).
+Proof. intros x y xy; generalize (H _ _ xy) (H0 _ _ xy); firstorder. Qed.
+
 (** Morphisms for quantifiers *)
 
 #[global]
