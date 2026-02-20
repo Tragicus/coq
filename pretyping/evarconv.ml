@@ -381,7 +381,7 @@ let check_conv_record env sigma ((proji, u), (params1, c1, extra_args1)) (t2,sk2
       end
     with | Not_found -> (* If we find no solution, we ask the hook if it has any. *)
       match (apply_hooks env sigma ((proji, u), params1, c1) (t2, args2)) with
-      | Some r -> r, args2' @ args2
+      | Some r -> r, args2
       | None -> raise Not_found
   in
   let t2 = Stack.zip sigma (h2, (Stack.append_app_list args2 Stack.empty)) in
@@ -747,14 +747,12 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
     UnifFailure (i, NotSameHead)
   in
   (* Checks whether two terms with the same head unify (without unfolding) *)
-  let eq_head appr1 appr2 evd =
+  let eq_head (term1, sk1) (term2, sk2) evd =
     (* Gather the universe constraints that would make term1 and term2 equal.
        If these only involve unifications of flexible universes to other universes,
        allow this identification (first-order unification of universes). Otherwise
        fallback to unfolding.
     *)
-    let (term1, sk1) = appr1 in
-    let (term2, sk2) = appr2 in
     let check_univs univs i =
       match univs with
       | None -> UnifFailure (i,NotSameHead)
@@ -878,7 +876,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
       let tM = Stack.zip evd apprM in
         miller_pfenning l2r
           (fun () -> if Stack.not_purely_applicative skM then (* Postpone the use of an heuristic *)
-            if not postpone then let () = debug_unification (fun () -> Pp.(str "prevent miller from postponing")) in quick_fail i else
+            if not postpone then quick_fail i else
             switch (fun x y -> Success (Evarutil.add_unification_pb (pbty,env,x,y) i)) (Stack.zip evd apprF) (Stack.zip evd (if l2r then snd hds else fst hds))
           else quick_fail i)
           ev lF tM i
@@ -1153,12 +1151,13 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
         ise_try evd [f1; f2]
 
         | _, Lambda _ when sk2 <> [] && not (EConstr.isLambda evd term1) ->
-            evar_eqappr_x flags env evd pbty hds None appr1
-              (whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd appr2)
+            (* beta-redexes are the enemy, they should be destroyed as soon as possible. *)
+            let appr2 = whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd appr2 in
+            evar_eqappr_x flags env evd pbty (fst hds, appr2) None appr1 appr2
         | Lambda _, _ when sk1 <> [] && not (EConstr.isLambda evd term2) ->
-            evar_eqappr_x flags env evd pbty hds None
-              (whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd appr1)
-              appr2
+            (* beta-redexes are the enemy, they should be destroyed as soon as possible. *)
+            let appr1 = whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd appr1 in
+            evar_eqappr_x flags env evd pbty (appr1, snd hds) None appr1 appr2
 
         | _, _ ->
         let p1 = match get_proj_case appr1 with Proj.CS _ when lastUnfolded = Some true -> Proj.None | p -> p in
@@ -1983,7 +1982,7 @@ let is_constant_instance sigma (evk, args) alias =
   List.for_all (fun a -> EConstr.eq_constr sigma a alias || isEvar sigma a)
     (remove_instance_local_defs sigma evk args)
 
-let apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2 =
+let rec apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2 =
   let t1 = apprec_nohdbeta flags env evd (whd_head_evar evd t1) in
   let t2 = apprec_nohdbeta flags env evd (whd_head_evar evd t2) in
   let (term1,l1 as appr1) = try destApp evd t1 with DestKO -> (t1, [||]) in
@@ -2033,26 +2032,34 @@ let apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2 =
                  (position_problem true pbty) ev1 ev2)
       with IllTypedInstance (env,evd,t,u) ->
             UnifFailure (evd,InstanceNotSameType (evk1,env,t,u)))
-  | Evar ev1,_ when Array.length l1 <= Array.length l2 && is_evar_allowed flags evd (fst ev1) ->
+  | Evar ev1,_ when is_evar_allowed flags (fst ev1) ->
       (* On "?n t1 .. tn = u u1 .. u(n+p)", try first-order unification *)
       (* and otherwise second-order matching *)
       ise_try evd
-        [(fun evd -> first_order_unification flags env evd (ev1,l1) appr2);
+        [(fun evd -> if Array.length l1 <= Array.length l2 then first_order_unification flags env evd (ev1,l1) appr2 else UnifFailure (evd, NotSameHead));
          (fun evd ->
-           second_order_matching_with_args flags env evd with_ho pbty ev1 l1 t2)]
-  | _,Evar ev2 when Array.length l2 <= Array.length l1 && is_evar_allowed flags evd (fst ev2) ->
+           second_order_matching_with_args flags env evd with_ho pbty ev1 l1 t2);
+         (fun evd ->
+           let term2, sk2 = Reductionops.whd_nored_state env evd (t2, []) in
+           match flex_kind_of_term flags env evd term2 sk2 with
+           | MaybeFlexible vsk2' ->
+              let t2 = Stack.zip evd (whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd vsk2') in
+               apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2
+           | _ -> UnifFailure (evd, NotSameHead))]
+  | _,Evar ev2 when is_evar_allowed flags (fst ev2) ->
       (* On "u u1 .. u(n+p) = ?n t1 .. tn", try first-order unification *)
       (* and otherwise second-order matching *)
       ise_try evd
-        [(fun evd -> first_order_unification flags env evd (ev2,l2) appr1);
+        [(fun evd -> if Array.length l2 <= Array.length l1 then first_order_unification flags env evd (ev2,l2) appr1 else UnifFailure (evd, NotSameHead));
          (fun evd ->
-           second_order_matching_with_args flags env evd with_ho pbty ev2 l2 t1)]
-  | Evar ev1,_ when is_evar_allowed flags evd (fst ev1) ->
-      (* Try second-order pattern-matching *)
-      second_order_matching_with_args flags env evd with_ho pbty ev1 l1 t2
-  | _,Evar ev2 when is_evar_allowed flags evd (fst ev2) ->
-      (* Try second-order pattern-matching *)
-      second_order_matching_with_args flags env evd with_ho pbty ev2 l2 t1
+           second_order_matching_with_args flags env evd with_ho pbty ev2 l2 t1);
+         (fun evd ->
+           let term1, sk1 = Reductionops.whd_nored_state env evd (t1, []) in
+           match flex_kind_of_term flags env evd term1 sk1 with
+           | MaybeFlexible vsk1' ->
+              let t1 = Stack.zip evd (whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd vsk1') in
+               apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2
+           | _ -> UnifFailure (evd, NotSameHead))]
   | _ ->
       (* Some head evar have been instantiated, or unknown kind of problem *)
       evar_conv_x flags env evd pbty t1 t2
