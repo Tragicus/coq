@@ -531,9 +531,14 @@ let nb_cs_proj_args env ise pc f u =
     let k = Option.get (constr_key (EConstr.mkConstU (pc, EConstr.EInstance.empty))) in
     let k' = Option.get (constr_key f) in
     if k = k' then -2 else
-    let _, k = Option.get (Keys.equiv_keys k k') in
-    k
-  with _ -> -1
+    let _, r = Option.get (Keys.equiv_keys k k') in
+    pp(lazy(str"same keys : " ++ Keys.pr_key Names.GlobRef.print k ++ str " " ++ Keys.pr_key Names.GlobRef.print k'));
+    r
+  with _ ->
+    pp(lazy(str"different keys : " ++
+      (try let k = Option.get (constr_key (EConstr.mkConstU (pc, EConstr.EInstance.empty))) in Keys.pr_key Names.GlobRef.print k with _ -> str "<not a key>") ++ str " " ++
+      (try let k = Option.get (constr_key f) in Keys.pr_key Names.GlobRef.print k with _ -> str "<not a key>")));
+    -1
 
 let isEvar_k ise k f =
   match EConstr.kind ise f with Evar (k', _) -> k = k' | _ -> false
@@ -583,7 +588,7 @@ let filter_upat env sigma i0 f n u fpats =
           | Proj (p, _, _) -> true
           | _ -> false in
         is_proj p in
-      if is_proj then 0 else proj_nparams pc in
+      if is_proj then 0 else proj_nparams env pc in
     let np = na + nc in
     if n < np then -1 else np
   | _ -> -1 in
@@ -723,6 +728,7 @@ let match_upats_HO ~on_instance upats env sigma0 ise c =
             ise' pb b
         | KpatFlex | KpatProj _ ->
           let fa = mkSubApp f (i - Array.length u.up_a) a in
+          pp(lazy(str"FLEX(" ++ int np ++ str ") " ++ int i ++ str " >= " ++ int (Array.length u.up_a) ++ str " ~ " ++ int (Array.length a) ++ str " : " ++ pr_econstr_env env ise u.up_f ++ str" = " ++ pr_econstr_env env ise fa));
           let ise =
             match EConstr.kind ise f, EConstr.kind ise u.up_f with
             | Proj _, _ | _, Proj _ ->
@@ -732,7 +738,6 @@ let match_upats_HO ~on_instance upats env sigma0 ise c =
                let tfa = Retyping.get_type_of ~lax:true env ise fa in
                unif_HO env ise tuf tfa
             | _ -> ise in
-          pp(lazy(str"FLEX " ++ pr_econstr_env env ise u.up_f ++ str" = " ++ pr_econstr_env env ise fa));
           unif_HO env ise u.up_f fa
         | _ -> unif_HO env ise u.up_f f in
         let ise'' = unif_HO_args env ise' u.up_a (i - Array.length u.up_a) a in

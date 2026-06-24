@@ -99,13 +99,17 @@ let subst_key subst k =
 let subst_keys (subst,(k, ki , k', k'i)) =
   (subst_key subst k, ki, subst_key subst k', k'i)
 
-let discharge_key = function
+let discharge_key k i = match k with
   | KGlob (GlobRef.VarRef _ as g) when Global.is_in_section g -> None
-  | x -> Some x
+  | KGlob (GlobRef.ConstRef c as g) when Global.is_in_section g ->
+    let n = Array.length (Cooking.instance_of_cooking_info (Section.segment_of_constant c (Option.get (Safe_typing.sections_of_safe_env (Global.safe_env ()))))) in
+    Some (k, (i + n))
+  | k -> Some (k, i)
+
 
 let discharge_keys (k, ki, k', k'i) =
-  match discharge_key k, discharge_key k' with
-  | Some x, Some y -> Some (x, ki, y, k'i)
+  match discharge_key k ki, discharge_key k' k'i with
+  | Some (k, ki), Some (k', k'i) -> Some (k, ki, k', k'i)
   | _ -> None
 
 type key_obj = key * int * key * int

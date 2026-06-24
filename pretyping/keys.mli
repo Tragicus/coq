@@ -19,5 +19,7 @@ val equiv_keys : key -> key -> (int * int) option
 val constr_key : Environ.env -> ('a -> ('a, 't, 'u, 'i, 'r) Constr.kind_of_term) -> 'a -> key option
 (** Compute the head key of a term. *)
 
+val pr_key : (Names.GlobRef.t -> Pp.t) -> key -> Pp.t
+
 val pr_keys : (Names.GlobRef.t -> Pp.t) -> Pp.t
 (** Pretty-print the mapping *)

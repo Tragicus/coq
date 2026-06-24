@@ -1556,8 +1556,9 @@ let rec unify_0_with_initial_metas (subst : subst0) conv_at_top env pb flags m n
       | Clval (_, _, b) -> Some b.rebus
       | exception Not_found -> None
       in
+    let (sigma,t,c,bs,(params,params1),(us,us2),(ts,ts1),c1,(n,t2)) =
       try
-        let (_, (_, c1, _)) as p1 = Evarconv.decompose_proj ~metas (fst curenvnb) sigma f1l1 in
+        let (_, (_, c1, _)) as p1 = Evarconv.decompose_proj ~metas:(metasfn substn) (fst curenvnb) sigma f1l1 in
         let c1 = whd_all env sigma c1 in
         (* [proj (ctor ...)]: don't use CS *)
         match kind sigma c1 with

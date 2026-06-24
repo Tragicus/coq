@@ -159,7 +159,7 @@ type orig = { left: state; right: state }
 
 val evar_eqappr_x : ?rhs_is_already_stuck:bool -> unify_flags ->
   env -> evar_map -> conv_pb ->
-  (state * state) ->
+  orig ->
   bool option -> state -> state ->
       Evarsolve.unification_result
 
