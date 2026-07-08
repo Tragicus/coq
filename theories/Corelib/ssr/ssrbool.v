@@ -505,6 +505,7 @@ Structure decProp := DecProp {
   }.
 
 Notation "? b" := (propb b) (at level 2).
+Arguments prop _ /.
 Arguments propb : simpl nomatch.
 
 #[global] Hint Resolve propbP : core.
