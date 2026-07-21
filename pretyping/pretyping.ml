@@ -1326,8 +1326,7 @@ struct
     let r = Retyping.relevance_of_term !!env sigma j.uj_val in
     let var = LocalDef (make_annot name r, j.uj_val, t) in
     let tycon = lift_tycon 1 tycon in
-    let hypnaming = VarSet.variables (Global.env ()) in
-    let var, env = push_rel ~hypnaming sigma var env in
+    let var, env = push_rel sigma var env in
     let sigma, j' = pretype tycon env sigma c2 in
     let name = get_name var in
     let l = mkLetIn (make_annot name r, j.uj_val, t, j'.uj_val) in

@@ -778,7 +778,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
         (fun i -> evar_conv_x flags env i CONV c1 c2);
         (fun i -> exact_ise_stack2 env i (evar_conv_x flags) sk1 sk2)]
     | Proj (p1, _, c1), Const (p2, u2) ->
-      if not (QConstant.equal env (Projection.constant p1) p2)
+      if not (QConstant.equal env (Environ.projection_repr_constant env (Projection.repr p1)) p2)
       then UnifFailure (evd,NotSameHead)
       else (match destApp evd (Retyping.expand_projection env evd p1 c1 []) with
       | exception Retyping.RetypeError _ -> UnifFailure (evd,NotSameHead)
@@ -786,7 +786,7 @@ and evar_eqappr_x ?(rhs_is_already_stuck = false) flags env evd pbty
         check_univs (EConstr.eq_constr_universes env evd term1 term2);
         (fun i -> exact_ise_stack2 env i (evar_conv_x flags) (Stack.append_app args1 sk1) sk2)])
     | Const (p1, u1), Proj (p2, _, c2) ->
-      if not (QConstant.equal env p1 (Projection.constant p2))
+      if not (QConstant.equal env p1 (Environ.projection_repr_constant env (Projection.repr p2)))
       then UnifFailure (evd,NotSameHead)
       else (match destApp evd (Retyping.expand_projection env evd p2 c2 []) with
       | exception Retyping.RetypeError _ -> UnifFailure (evd,NotSameHead)
@@ -2061,7 +2061,7 @@ let rec apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2 =
                  (position_problem true pbty) ev1 ev2)
       with IllTypedInstance (env,evd,t,u) ->
             UnifFailure (evd,InstanceNotSameType (evk1,env,t,u)))
-  | Evar ev1,_ when is_evar_allowed flags (fst ev1) ->
+  | Evar ev1,_ when is_evar_allowed flags evd (fst ev1) ->
       (* On "?n t1 .. tn = u u1 .. u(n+p)", try first-order unification *)
       (* and otherwise second-order matching *)
       ise_try evd
@@ -2075,7 +2075,7 @@ let rec apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2 =
               let t2 = Stack.zip evd (whd_betaiota_deltazeta_for_iota_state flags.open_ts env evd vsk2') in
                apply_conversion_problem_heuristic flags env evd with_ho pbty t1 t2
            | _ -> UnifFailure (evd, NotSameHead))]
-  | _,Evar ev2 when is_evar_allowed flags (fst ev2) ->
+  | _,Evar ev2 when is_evar_allowed flags evd (fst ev2) ->
       (* On "u u1 .. u(n+p) = ?n t1 .. tn", try first-order unification *)
       (* and otherwise second-order matching *)
       ise_try evd
